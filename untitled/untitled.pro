@@ -47,6 +47,7 @@ win32 {
     INCLUDEPATH += $$SIGNAL_DIR/include $$OPENSSL_DIR/include
     msvc {
         LIBS += $$SIGNAL_DIR/lib/signal-protocol-c.lib $$OPENSSL_DIR/lib/libcrypto.lib
+        LIBS += Crypt32.lib
     } else {
         LIBS += -L$$SIGNAL_DIR/lib -L$$OPENSSL_DIR/lib -lsignal-protocol-c -lcrypto
     }

@@ -13,6 +13,9 @@
 
 #ifdef Q_OS_MACOS
 #include <Security/Security.h>
+#elif defined(Q_OS_WIN)
+#include <windows.h>
+#include <wincrypt.h>
 #endif
 
 #include <openssl/evp.h>
@@ -152,6 +155,81 @@ static bool getOrCreateSecureStateKey(const QString &username, QByteArray *key)
 static QString secureStateKeyStoreName()
 {
     return "macOS Keychain";
+}
+#elif defined(Q_OS_WIN)
+static QString secureKeyFilePath(const QString &username)
+{
+    QString basePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (basePath.isEmpty())
+        basePath = QDir::homePath() + "/.tcp_messenger";
+
+    const QString safeUser = QString::fromLatin1(QUrl::toPercentEncoding(username));
+    return QDir(basePath).filePath("signal_state_key_" + safeUser + ".bin");
+}
+
+static bool protectWithDpapi(const QByteArray &plainText, QByteArray *cipherText)
+{
+    DATA_BLOB input;
+    input.pbData = reinterpret_cast<BYTE *>(const_cast<char *>(plainText.constData()));
+    input.cbData = static_cast<DWORD>(plainText.size());
+
+    DATA_BLOB output;
+    if (!CryptProtectData(&input, L"Messenger Signal state key", nullptr, nullptr, nullptr, 0, &output))
+        return false;
+
+    *cipherText = QByteArray(reinterpret_cast<const char *>(output.pbData), static_cast<int>(output.cbData));
+    LocalFree(output.pbData);
+    return true;
+}
+
+static bool unprotectWithDpapi(const QByteArray &cipherText, QByteArray *plainText)
+{
+    DATA_BLOB input;
+    input.pbData = reinterpret_cast<BYTE *>(const_cast<char *>(cipherText.constData()));
+    input.cbData = static_cast<DWORD>(cipherText.size());
+
+    DATA_BLOB output;
+    if (!CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr, 0, &output))
+        return false;
+
+    *plainText = QByteArray(reinterpret_cast<const char *>(output.pbData), static_cast<int>(output.cbData));
+    LocalFree(output.pbData);
+    return true;
+}
+
+static bool getOrCreateSecureStateKey(const QString &username, QByteArray *key)
+{
+    const QString path = secureKeyFilePath(username);
+    QFile file(path);
+    if (file.exists() && file.open(QIODevice::ReadOnly))
+    {
+        const QByteArray protectedKey = file.readAll();
+        file.close();
+        if (unprotectWithDpapi(protectedKey, key) && key->size() == STATE_KEY_BYTES)
+            return true;
+    }
+
+    key->resize(STATE_KEY_BYTES);
+    if (RAND_bytes(reinterpret_cast<unsigned char *>(key->data()), key->size()) != 1)
+        return false;
+
+    QByteArray protectedKey;
+    if (!protectWithDpapi(*key, &protectedKey))
+        return false;
+
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QFile out(path);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    out.write(protectedKey);
+    out.close();
+    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    return true;
+}
+
+static QString secureStateKeyStoreName()
+{
+    return "Windows DPAPI";
 }
 #else
 static bool getOrCreateSecureStateKey(const QString &, QByteArray *)

@@ -1,0 +1,90 @@
+name: Build Windows Client
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/windows-client.yml"
+      - "protocol.h"
+      - "untitled/**"
+      - "deploy/windows-client/**"
+
+jobs:
+  build:
+    name: Windows x64 client
+    runs-on: windows-2022
+
+    env:
+      QT_VERSION: "6.7.2"
+      QT_ARCH: "win64_msvc2019_64"
+      VCPKG_DEFAULT_TRIPLET: "x64-windows"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable MSVC developer shell
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ env.QT_ARCH }}
+          cache: true
+
+      - name: Install OpenSSL
+        shell: pwsh
+        run: |
+          vcpkg install openssl:${env:VCPKG_DEFAULT_TRIPLET} --clean-after-build
+
+      - name: Build libsignal-protocol-c
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force deps | Out-Null
+          git clone --depth 1 https://github.com/signalapp/libsignal-protocol-c.git deps/libsignal-protocol-c-src
+          cmake `
+            -S deps/libsignal-protocol-c-src `
+            -B deps/libsignal-protocol-c-build `
+            -G "NMake Makefiles" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX="${env:GITHUB_WORKSPACE}\deps\signal" `
+            -DBUILD_TESTING=OFF
+          cmake --build deps/libsignal-protocol-c-build --config Release
+          cmake --install deps/libsignal-protocol-c-build
+
+      - name: Build messenger.exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build | Out-Null
+          Push-Location build
+          qmake ..\untitled\untitled.pro `
+            "SIGNAL_DIR=${env:GITHUB_WORKSPACE}\deps\signal" `
+            "OPENSSL_DIR=C:\vcpkg\installed\${env:VCPKG_DEFAULT_TRIPLET}" `
+            CONFIG+=release
+          nmake
+          Pop-Location
+
+      - name: Deploy Qt runtime
+        shell: pwsh
+        run: |
+          windeployqt --release build\release\messenger.exe
+          Copy-Item "C:\vcpkg\installed\${env:VCPKG_DEFAULT_TRIPLET}\bin\libcrypto*.dll" build\release\ -ErrorAction SilentlyContinue
+          Copy-Item "C:\vcpkg\installed\${env:VCPKG_DEFAULT_TRIPLET}\bin\libssl*.dll" build\release\ -ErrorAction SilentlyContinue
+          Copy-Item "deps\signal\bin\*.dll" build\release\ -ErrorAction SilentlyContinue
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build\release\* -DestinationPath messenger-windows.zip -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: messenger-windows
+          path: messenger-windows.zip
+          if-no-files-found: error

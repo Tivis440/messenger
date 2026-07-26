@@ -28,6 +28,9 @@ sudo systemctl enable --now messenger
 macOS-клиент собирается в `messenger.app`, Windows-клиент в `messenger.exe`.
 Подробности сборки лежат в `BUILD_RELEASE.md`.
 
+Windows-клиент можно собрать автоматически через GitHub Actions:
+`Actions -> Build Windows Client -> Run workflow`.
+
 ## Важно про TLS
 
 Сертификат сервера не коммитится в git. При установке на Ubuntu `install.sh` создаст новый dev-сертификат, если его нет.

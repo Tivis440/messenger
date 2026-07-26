@@ -2,6 +2,18 @@
 
 Use this on the second user's Windows PC.
 
+## GitHub Actions
+
+The recommended path is to build the Windows client on GitHub:
+
+1. Open the repository on GitHub.
+2. Go to `Actions`.
+3. Select `Build Windows Client`.
+4. Press `Run workflow`.
+5. Download the `messenger-windows` artifact.
+
+The artifact contains `messenger.exe` and the Qt/OpenSSL runtime files needed to run it.
+
 ## Requirements
 
 - Qt 6 for MSVC 64-bit.
