@@ -148,7 +148,7 @@ bool Server::saveUsers()
     QFile f(m_usersFile);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
     {
-        qWarning() << "Не удалось сохранить пользователей в:" << m_usersFile;
+        qWarning() << "Не удалось сохранить пользователей в:" << m_usersFile << f.errorString();
         return false;
     }
 

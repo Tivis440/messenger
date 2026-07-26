@@ -13,6 +13,10 @@ fi
 apt-get update
 apt-get install -y build-essential qt6-base-dev libargon2-dev openssl pkg-config
 
+if ! id messenger >/dev/null 2>&1; then
+    useradd --system --home "$DATA_DIR" --shell /usr/sbin/nologin messenger
+fi
+
 mkdir -p "$APP_DIR" "$DATA_DIR"
 cp -R protocol.h server "$APP_DIR/"
 
@@ -37,11 +41,12 @@ if [ ! -f "$DATA_DIR/tls_server.crt" ] || [ ! -f "$DATA_DIR/tls_server.key" ]; t
     fi
 fi
 
-chmod 600 "$DATA_DIR/tls_server.key"
-chmod 600 "$DATA_DIR"/*.json
-
 FINGERPRINT="$(openssl x509 -in "$DATA_DIR/tls_server.crt" -outform der | openssl dgst -sha256 -hex | awk '{print toupper($NF)}')"
 printf '%s\n' "$FINGERPRINT" > "$DATA_DIR/tls_server.sha256"
+chown -R messenger:messenger "$DATA_DIR"
+chmod 700 "$DATA_DIR"
+chmod 600 "$DATA_DIR/tls_server.key"
+chmod 600 "$DATA_DIR"/*.json
 chmod 644 "$DATA_DIR/tls_server.crt" "$DATA_DIR/tls_server.sha256"
 
 echo "Server built: $APP_DIR/server/server"

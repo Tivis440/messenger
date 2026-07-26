@@ -35,8 +35,6 @@ sudo sh deploy/ubuntu-server/run.sh
 ## Run through systemd
 
 ```sh
-sudo useradd --system --home /var/lib/messenger --shell /usr/sbin/nologin messenger
-sudo chown -R messenger:messenger /var/lib/messenger
 sudo cp deploy/ubuntu-server/messenger.service.example /etc/systemd/system/messenger.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now messenger
