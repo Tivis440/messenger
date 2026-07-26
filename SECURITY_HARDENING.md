@@ -3,7 +3,7 @@
 ## Implemented
 
 - TLS is mandatory for the client/server transport.
-- The client pins the server certificate SHA-256 fingerprint.
+- The client stores the server certificate SHA-256 fingerprint automatically on first use and blocks unexpected changes after that.
 - The client rejects expired or not-yet-valid pinned certificates.
 - Server-side password records use Argon2id for new passwords.
 - Legacy PBKDF2 and SHA-256 password records are migrated after successful login.

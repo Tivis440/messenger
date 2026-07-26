@@ -81,6 +81,8 @@ private:
     QString contactDisplayName(const QString &contactId) const;
     QString historyFilePath() const;
     QString selectedPeer() const;
+    bool verifyServerCertificate(bool allowTrustOnFirstUse, const QList<QSslError> &errors = {});
+    QString serverPinSettingsKey() const;
 
     bool isConnected() const;
 

@@ -12,6 +12,7 @@ sudo sh deploy/ubuntu-server/install.sh
 
 The script builds the Qt server, creates an empty data directory, and generates a development TLS certificate if one is missing.
 At the end it prints the certificate SHA-256 fingerprint and writes it to `/var/lib/messenger/tls_server.sha256`.
+The client uses trust on first use: on the first connection it stores the server certificate fingerprint automatically, then blocks unexpected certificate changes.
 
 Default paths:
 
@@ -43,14 +44,4 @@ sudo systemctl enable --now messenger
 
 Open TCP port `5555` on the Ubuntu firewall/router. The clients should use the server IP or DNS name in the login window.
 
-After changing the TLS certificate, update the pinned fingerprint in the client source before shipping the client build:
-
-```sh
-sh deploy/client/update-pinned-cert.sh --ssh user@server-ip
-```
-
-For a local certificate file:
-
-```sh
-sh deploy/client/update-pinned-cert.sh --cert /path/to/tls_server.crt
-```
+After changing the TLS certificate, reset the saved server certificate in the client menu: `Справка -> Сбросить сертификат сервера`.

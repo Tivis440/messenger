@@ -58,8 +58,7 @@ static QString statusLabel(const QString &status)
     return QString();
 }
 
-static const QList<QByteArray> PINNED_SERVER_CERT_SHA256 = {
-    QByteArray::fromHex("7CBCFD8806A08F6691E023F80250DA30D518EBD121935899E6A16FE580BC79AD")
+static const QList<QByteArray> DEFAULT_PINNED_SERVER_CERT_SHA256 = {
 };
 
 static QString configuredServerHost()
@@ -73,6 +72,26 @@ static quint16 configuredServerPort()
     bool ok = false;
     const int port = QSettings().value("server/port", Protocol::DEFAULT_PORT).toInt(&ok);
     return ok && port > 0 && port <= 65535 ? static_cast<quint16>(port) : Protocol::DEFAULT_PORT;
+}
+
+static QString certificateFingerprintHex(const QSslCertificate &certificate)
+{
+    return QString::fromLatin1(certificate.digest(QCryptographicHash::Sha256).toHex().toUpper());
+}
+
+static bool isTofuCompatibleSslError(QSslError::SslError error)
+{
+    switch (error)
+    {
+    case QSslError::SelfSignedCertificate:
+    case QSslError::SelfSignedCertificateInChain:
+    case QSslError::UnableToGetIssuerCertificate:
+    case QSslError::UnableToVerifyFirstCertificate:
+    case QSslError::HostNameMismatch:
+        return true;
+    default:
+        return false;
+    }
 }
 
 static QColor avatarColor(const QString &name)
@@ -433,7 +452,31 @@ void MainWindow::setupMenus()
     connect(securityAction, &QAction::triggered, this, [this]() {
         QMessageBox::information(this,
                                  "Безопасность",
-                                 "Транспорт: TLS с привязкой сертификата\nСообщения: Signal-сессии\nЛокальные ключи: зашифрованное хранилище состояния");
+                                 "Транспорт: TLS с автоматической привязкой сертификата при первом подключении\nСообщения: Signal-сессии\nЛокальные ключи: зашифрованное хранилище состояния");
+    });
+    QAction *resetServerCertificateAction = helpMenu->addAction("Сбросить сертификат сервера");
+    connect(resetServerCertificateAction, &QAction::triggered, this, [this]() {
+        const QString key = serverPinSettingsKey();
+        QSettings settings;
+        const QString storedFingerprint = settings.value(key).toString();
+        if (storedFingerprint.isEmpty())
+        {
+            QMessageBox::information(this, "Сертификат сервера", "Для текущего сервера еще нет сохраненного сертификата.");
+            return;
+        }
+
+        const QMessageBox::StandardButton answer = QMessageBox::warning(
+            this,
+            "Сбросить сертификат сервера?",
+            "При следующем подключении приложение снова автоматически доверит первому сертификату этого сервера. Делайте это только если вы переустановили сервер или сознательно заменили TLS-сертификат.",
+            QMessageBox::Reset | QMessageBox::Cancel,
+            QMessageBox::Cancel);
+
+        if (answer == QMessageBox::Reset)
+        {
+            settings.remove(key);
+            ui->statusbar->showMessage("Сохраненный сертификат сервера сброшен", 4000);
+        }
     });
 }
 
@@ -762,6 +805,12 @@ void MainWindow::onConnected()
 
 void MainWindow::onEncrypted()
 {
+    if (!verifyServerCertificate(true))
+    {
+        m_socket->abort();
+        return;
+    }
+
     logSystem("Защищенный канал TLS установлен.");
     if (m_pendingRegister)
     {
@@ -777,28 +826,99 @@ void MainWindow::onEncrypted()
 
 void MainWindow::onSslErrors(const QList<QSslError> &errors)
 {
+    if (verifyServerCertificate(true, errors))
+        m_socket->ignoreSslErrors(errors);
+    else
+        m_socket->abort();
+}
+
+QString MainWindow::serverPinSettingsKey() const
+{
+    const QString endpoint = configuredServerHost().toLower() + ":" + QString::number(configuredServerPort());
+    const QString endpointHash = QString::fromLatin1(QCryptographicHash::hash(endpoint.toUtf8(), QCryptographicHash::Sha256).toHex());
+    return "serverPins/" + endpointHash;
+}
+
+bool MainWindow::verifyServerCertificate(bool allowTrustOnFirstUse, const QList<QSslError> &errors)
+{
     const QSslCertificate peerCertificate = m_socket->peerCertificate();
-    const QByteArray fingerprint = peerCertificate.digest(QCryptographicHash::Sha256);
+    if (peerCertificate.isNull())
+    {
+        const QString reason = "сервер не прислал TLS-сертификат";
+        logError("TLS ошибка: " + reason + ".");
+        if (m_authDialog)
+            m_authDialog->showError("Небезопасное подключение: " + reason + ".");
+        return false;
+    }
+
     const QDateTime now = QDateTime::currentDateTimeUtc();
     const bool certificateInDate = peerCertificate.effectiveDate().toUTC() <= now &&
                                    peerCertificate.expiryDate().toUTC() >= now;
-
-    if (!peerCertificate.isNull() && certificateInDate && PINNED_SERVER_CERT_SHA256.contains(fingerprint))
+    if (!certificateInDate)
     {
-        m_socket->ignoreSslErrors(errors);
-        logSystem("Сертификат сервера проверен по закрепленному отпечатку.");
-        return;
+        const QString reason = "срок действия сертификата сервера истек или еще не начался";
+        logError("TLS ошибка: " + reason + ".");
+        if (m_authDialog)
+            m_authDialog->showError("Небезопасное подключение: " + reason + ".");
+        return false;
     }
 
-    const QString reason = certificateInDate
-                               ? "сертификат сервера не совпадает с закрепленным отпечатком"
-                               : "срок действия сертификата сервера истек или еще не начался";
+    for (const QSslError &error : errors)
+    {
+        if (!isTofuCompatibleSslError(error.error()))
+        {
+            const QString reason = "сертификат сервера отклонен TLS-проверкой";
+            logError("TLS ошибка: " + reason + ".");
+            if (m_authDialog)
+                m_authDialog->showError("Небезопасное подключение: " + reason + ".");
+            return false;
+        }
+    }
+
+    const QByteArray fingerprint = peerCertificate.digest(QCryptographicHash::Sha256);
+    const QString fingerprintHex = certificateFingerprintHex(peerCertificate);
+
+    QSettings settings;
+    const QString settingsKey = serverPinSettingsKey();
+    const QString storedFingerprint = settings.value(settingsKey).toString().trimmed().toUpper();
+
+    if (!storedFingerprint.isEmpty())
+    {
+        if (storedFingerprint == fingerprintHex)
+        {
+            logSystem("Сертификат сервера проверен по сохраненному отпечатку.");
+            return true;
+        }
+
+        const QString reason = "сертификат сервера изменился";
+        logError("TLS ошибка: " + reason + ".");
+        if (m_authDialog)
+        {
+            m_authDialog->showError("Небезопасное подключение: " + reason +
+                                    ". Если это плановая замена сервера, сбросьте сохраненный pin вручную.");
+        }
+        return false;
+    }
+
+    if (DEFAULT_PINNED_SERVER_CERT_SHA256.contains(fingerprint))
+    {
+        settings.setValue(settingsKey, fingerprintHex);
+        logSystem("Сертификат сервера проверен по встроенному отпечатку и сохранен локально.");
+        return true;
+    }
+
+    if (allowTrustOnFirstUse)
+    {
+        settings.setValue(settingsKey, fingerprintHex);
+        logSystem("Первое подключение: отпечаток TLS-сертификата сервера сохранен локально.");
+        return true;
+    }
+
+    const QString reason = "сертификат сервера еще не доверен";
     logError("TLS ошибка: " + reason + ".");
     if (m_authDialog)
-    {
         m_authDialog->showError("Небезопасное подключение: " + reason + ".");
-    }
-    m_socket->abort();
+    return false;
 }
 
 void MainWindow::onDisconnected()
