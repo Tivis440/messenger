@@ -985,9 +985,18 @@ void MainWindow::onReadyRead()
 
 void MainWindow::onError(QAbstractSocket::SocketError socketError)
 {
-    Q_UNUSED(socketError);
-    m_lastConnectionError = "Не удалось подключиться: " + m_socket->errorString();
-    logError("Ошибка: " + m_socket->errorString());
+    const QString endpoint = configuredServerHost() + ":" + QString::number(configuredServerPort());
+    QString details = QString("Не удалось подключиться к %1: %2 (код %3)")
+                          .arg(endpoint, m_socket->errorString())
+                          .arg(static_cast<int>(socketError));
+
+    if (socketError == QAbstractSocket::ConnectionRefusedError)
+    {
+        details += "\nСервер доступен только если процесс слушает этот порт и firewall VPS разрешает входящий TCP.";
+    }
+
+    m_lastConnectionError = details;
+    logError("Ошибка: " + details);
     ui->buttonDisconnect->setEnabled(m_authenticated);
     if (m_authDialog)
     {

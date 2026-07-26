@@ -49,6 +49,7 @@ AuthDialog::AuthDialog(QWidget *parent)
     m_serverPortSpin->setRange(1, 65535);
     m_serverPortSpin->setValue(settings.value("server/port", Protocol::DEFAULT_PORT).toInt());
     m_serverPortSpin->setAccessibleName("Порт сервера");
+    m_serverPortSpin->setMinimumWidth(140);
 
     QFormLayout *serverForm = new QFormLayout;
     serverForm->setContentsMargins(0, 0, 0, 0);
