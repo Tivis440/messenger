@@ -69,12 +69,24 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $extractDir = "$env:RUNNER_TEMP\openssl-3.5.7"
+          $includeDir = Get-ChildItem $extractDir -Directory -Recurse |
+            Where-Object { Test-Path (Join-Path $_.FullName "openssl\evp.h") } |
+            Select-Object -First 1
+          $cryptoLib = Get-ChildItem $extractDir -Recurse -Filter libcrypto.lib | Select-Object -First 1
+          $sslLib = Get-ChildItem $extractDir -Recurse -Filter libssl.lib | Select-Object -First 1
+          $dlls = Get-ChildItem $extractDir -Recurse -Include libcrypto*.dll,libssl*.dll
+
+          if (-not $includeDir -or -not $cryptoLib -or -not $sslLib -or -not $dlls) {
+            Get-ChildItem $extractDir -Recurse -Include evp.h,libcrypto.lib,libssl.lib,libcrypto*.dll,libssl*.dll |
+              Select-Object FullName
+            throw "OpenSSL files were not found after extraction."
+          }
+
           New-Item -ItemType Directory -Force deps\openssl\include deps\openssl\lib deps\openssl\bin | Out-Null
-          Copy-Item "$extractDir\x64\include\*" deps\openssl\include\ -Recurse -Force
-          Copy-Item "$extractDir\x64\lib\libcrypto.lib" deps\openssl\lib\libcrypto.lib -Force
-          Copy-Item "$extractDir\x64\lib\libssl.lib" deps\openssl\lib\libssl.lib -Force
-          Copy-Item "$extractDir\x64\bin\libcrypto*.dll" deps\openssl\bin\ -Force
-          Copy-Item "$extractDir\x64\bin\libssl*.dll" deps\openssl\bin\ -Force
+          Copy-Item "$($includeDir.FullName)\*" deps\openssl\include\ -Recurse -Force
+          Copy-Item $cryptoLib.FullName deps\openssl\lib\libcrypto.lib -Force
+          Copy-Item $sslLib.FullName deps\openssl\lib\libssl.lib -Force
+          $dlls | Copy-Item -Destination deps\openssl\bin\ -Force
           Get-ChildItem deps\openssl -Recurse -Include evp.h,libcrypto.lib,libssl.lib,libcrypto*.dll,libssl*.dll |
             Select-Object FullName
 
