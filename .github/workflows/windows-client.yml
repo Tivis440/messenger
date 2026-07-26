@@ -19,7 +19,6 @@ jobs:
     env:
       QT_VERSION: "6.7.2"
       QT_ARCH: "win64_msvc2019_64"
-      VCPKG_DEFAULT_TRIPLET: "x64-windows"
 
     steps:
       - name: Checkout
@@ -40,7 +39,34 @@ jobs:
       - name: Install OpenSSL
         shell: pwsh
         run: |
-          vcpkg install openssl:${env:VCPKG_DEFAULT_TRIPLET} --clean-after-build
+          choco install openssl -y --no-progress
+          $roots = @(
+            "C:\Program Files\OpenSSL-Win64",
+            "C:\Program Files\OpenSSL",
+            "C:\OpenSSL-Win64"
+          )
+          $opensslRoot = $roots | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $opensslRoot) {
+            throw "OpenSSL installation directory was not found."
+          }
+
+          $includeDir = Get-ChildItem $opensslRoot -Directory -Recurse |
+            Where-Object { Test-Path (Join-Path $_.FullName "openssl\evp.h") } |
+            Select-Object -First 1
+          $cryptoLib = Get-ChildItem $opensslRoot -Recurse -Filter libcrypto.lib | Select-Object -First 1
+          if (-not $includeDir -or -not $cryptoLib) {
+            throw "OpenSSL headers or libcrypto.lib were not found in $opensslRoot."
+          }
+
+          New-Item -ItemType Directory -Force deps\openssl\include deps\openssl\lib deps\openssl\bin | Out-Null
+          Copy-Item "$($includeDir.FullName)\*" deps\openssl\include\ -Recurse -Force
+          Copy-Item $cryptoLib.FullName deps\openssl\lib\libcrypto.lib -Force
+          $sslLib = Get-ChildItem $opensslRoot -Recurse -Filter libssl.lib | Select-Object -First 1
+          if ($sslLib) {
+            Copy-Item $sslLib.FullName deps\openssl\lib\libssl.lib -Force
+          }
+          Get-ChildItem $opensslRoot -Recurse -Include libcrypto*.dll,libssl*.dll |
+            Copy-Item -Destination deps\openssl\bin\ -Force
 
       - name: Build libsignal-protocol-c
         shell: pwsh
@@ -65,7 +91,7 @@ jobs:
           Push-Location build
           qmake ..\untitled\untitled.pro `
             "SIGNAL_DIR=${env:GITHUB_WORKSPACE}\deps\signal" `
-            "OPENSSL_DIR=C:\vcpkg\installed\${env:VCPKG_DEFAULT_TRIPLET}" `
+            "OPENSSL_DIR=${env:GITHUB_WORKSPACE}\deps\openssl" `
             CONFIG+=release
           nmake
           Pop-Location
@@ -74,8 +100,7 @@ jobs:
         shell: pwsh
         run: |
           windeployqt --release build\release\messenger.exe
-          Copy-Item "C:\vcpkg\installed\${env:VCPKG_DEFAULT_TRIPLET}\bin\libcrypto*.dll" build\release\ -ErrorAction SilentlyContinue
-          Copy-Item "C:\vcpkg\installed\${env:VCPKG_DEFAULT_TRIPLET}\bin\libssl*.dll" build\release\ -ErrorAction SilentlyContinue
+          Copy-Item "deps\openssl\bin\*.dll" build\release\ -ErrorAction SilentlyContinue
           Copy-Item "deps\signal\bin\*.dll" build\release\ -ErrorAction SilentlyContinue
 
       - name: Package artifact
