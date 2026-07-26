@@ -53,6 +53,7 @@ jobs:
             -G "NMake Makefiles" `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_INSTALL_PREFIX="${env:GITHUB_WORKSPACE}\deps\signal" `
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
             -DBUILD_TESTING=OFF
           cmake --build deps/libsignal-protocol-c-build --config Release
           cmake --install deps/libsignal-protocol-c-build
