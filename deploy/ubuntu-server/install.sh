@@ -49,8 +49,40 @@ chmod 600 "$DATA_DIR/tls_server.key"
 chmod 600 "$DATA_DIR"/*.json
 chmod 644 "$DATA_DIR/tls_server.crt" "$DATA_DIR/tls_server.sha256"
 
+cat > /etc/systemd/system/messenger.service <<EOF
+[Unit]
+Description=Messenger TLS Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$APP_DIR/server
+ExecStart=$APP_DIR/server/server --port $PORT --data-dir $DATA_DIR
+Restart=on-failure
+RestartSec=3
+User=messenger
+Group=messenger
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=$DATA_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now messenger.service
+
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+    ufw allow "$PORT/tcp"
+fi
+
 echo "Server built: $APP_DIR/server/server"
-echo "Run: $APP_DIR/server/server --port $PORT --data-dir $DATA_DIR"
+echo "Service: messenger.service"
+echo "Status: systemctl status messenger.service --no-pager"
 echo "Certificate fingerprint for client pinning:"
 echo "$FINGERPRINT"
 echo "Fingerprint file: $DATA_DIR/tls_server.sha256"
