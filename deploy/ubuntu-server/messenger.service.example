@@ -1,0 +1,21 @@
+[Unit]
+Description=Messenger TLS Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/messenger/server
+ExecStart=/opt/messenger/server/server --port 5555 --data-dir /var/lib/messenger
+Restart=on-failure
+RestartSec=3
+User=messenger
+Group=messenger
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/messenger
+
+[Install]
+WantedBy=multi-user.target

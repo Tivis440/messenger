@@ -1,0 +1,35 @@
+# Build output
+build/
+dist/
+Makefile
+*.o
+moc_*.cpp
+ui_*.h
+*.app/
+*.exe
+*.dll
+*.dylib
+*.so
+
+# Qt Creator and local IDE state
+*.pro.user
+.qmake.stash
+.qtc_clangd/
+.qtcreator/
+
+# macOS filesystem noise
+.DS_Store
+._*
+
+# Server runtime data and secrets
+server/data/*.json
+server/data/*.key
+server/data/*.crt
+server/*.json
+server/*.key
+server/*.crt
+
+# Local logs and temp files
+*.log
+tmp/
+*.tmp
