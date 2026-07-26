@@ -50,8 +50,8 @@ protected:
     void changeEvent(QEvent *event) override;
 
 private:
-    void startLogin(const QString &username, const QString &password);
-    void startRegistration(const QString &username, const QString &password);
+    void startLogin(const QString &username, const QString &password, const QString &host = QString(), quint16 port = 0);
+    void startRegistration(const QString &username, const QString &password, const QString &host = QString(), quint16 port = 0);
     void setupConnections();
     void setupUI();
     void setupMenus();
@@ -96,6 +96,8 @@ private:
     QTimer *m_heartbeatTimer;
     class AuthDialog *m_authDialog = nullptr;
     QString m_lastConnectionError;
+    QString m_serverHost;
+    quint16 m_serverPort = 0;
     bool m_exiting = false;
     QString m_selectedPeer;
     struct ChatLine

@@ -194,12 +194,14 @@ void AuthDialog::requestLogin()
     }
 
     QSettings settings;
-    settings.setValue("server/host", m_serverHostEdit->text().trimmed().isEmpty() ? "127.0.0.1" : m_serverHostEdit->text().trimmed());
-    settings.setValue("server/port", m_serverPortSpin->value());
+    const QString host = m_serverHostEdit->text().trimmed().isEmpty() ? "127.0.0.1" : m_serverHostEdit->text().trimmed();
+    const quint16 port = static_cast<quint16>(m_serverPortSpin->value());
+    settings.setValue("server/host", host);
+    settings.setValue("server/port", port);
     settings.setValue("lastLoginName", loginName);
 
     showInfo("Подключение к серверу...");
-    emit loginRequested(username, password);
+    emit loginRequested(username, password, host, port);
 }
 
 void AuthDialog::requestRegistration()
@@ -214,11 +216,13 @@ void AuthDialog::requestRegistration()
     }
 
     QSettings settings;
-    settings.setValue("server/host", m_serverHostEdit->text().trimmed().isEmpty() ? "127.0.0.1" : m_serverHostEdit->text().trimmed());
-    settings.setValue("server/port", m_serverPortSpin->value());
+    const QString host = m_serverHostEdit->text().trimmed().isEmpty() ? "127.0.0.1" : m_serverHostEdit->text().trimmed();
+    const quint16 port = static_cast<quint16>(m_serverPortSpin->value());
+    settings.setValue("server/host", host);
+    settings.setValue("server/port", port);
 
     showInfo("Создаем анонимный ID...");
-    emit registerRequested(username, password);
+    emit registerRequested(username, password, host, port);
 }
 
 QString AuthDialog::generatePublicId() const

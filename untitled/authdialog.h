@@ -21,8 +21,8 @@ public:
     void showInfo(const QString &message);
 
 signals:
-    void loginRequested(const QString &username, const QString &password);
-    void registerRequested(const QString &username, const QString &password);
+    void loginRequested(const QString &username, const QString &password, const QString &host, quint16 port);
+    void registerRequested(const QString &username, const QString &password, const QString &host, quint16 port);
 
 private slots:
     void requestLogin();
