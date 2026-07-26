@@ -114,6 +114,11 @@ jobs:
           Get-Content $curveCmake | Select-String "internal_fast_tests" -Quiet | ForEach-Object {
             if ($_) { throw "Failed to remove internal_fast_tests.c from curve25519 build." }
           }
+          $curveSource = "deps\libsignal-protocol-c-src\src\curve.c"
+          $curve = Get-Content $curveSource -Raw
+          $curve = $curve -replace '#include "curve25519/ed25519/tests/internal_fast_tests\.h"\r?\n', ""
+          $curve = $curve -replace 'int curve_internal_fast_tests\(int silent\)\s*\{\s*if \(all_fast_tests\(silent\) != 0\)\s*return SG_ERR_UNKNOWN;\s*return 0;\s*\}', 'int curve_internal_fast_tests(int silent) { (void)silent; return 0; }'
+          Set-Content -Path $curveSource -Value $curve -NoNewline
 
       - name: Configure libsignal-protocol-c
         shell: pwsh
