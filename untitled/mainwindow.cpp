@@ -845,13 +845,15 @@ QString MainWindow::serverPinSettingsKey() const
 
 bool MainWindow::verifyServerCertificate(bool allowTrustOnFirstUse, const QList<QSslError> &errors)
 {
+    m_lastConnectionError.clear();
     const QSslCertificate peerCertificate = m_socket->peerCertificate();
     if (peerCertificate.isNull())
     {
         const QString reason = "сервер не прислал TLS-сертификат";
+        m_lastConnectionError = "Небезопасное подключение: " + reason + ".";
         logError("TLS ошибка: " + reason + ".");
         if (m_authDialog)
-            m_authDialog->showError("Небезопасное подключение: " + reason + ".");
+            m_authDialog->showError(m_lastConnectionError);
         return false;
     }
 
@@ -861,9 +863,10 @@ bool MainWindow::verifyServerCertificate(bool allowTrustOnFirstUse, const QList<
     if (!certificateInDate)
     {
         const QString reason = "срок действия сертификата сервера истек или еще не начался";
+        m_lastConnectionError = "Небезопасное подключение: " + reason + ".";
         logError("TLS ошибка: " + reason + ".");
         if (m_authDialog)
-            m_authDialog->showError("Небезопасное подключение: " + reason + ".");
+            m_authDialog->showError(m_lastConnectionError);
         return false;
     }
 
@@ -872,9 +875,10 @@ bool MainWindow::verifyServerCertificate(bool allowTrustOnFirstUse, const QList<
         if (!isTofuCompatibleSslError(error.error()))
         {
             const QString reason = "сертификат сервера отклонен TLS-проверкой";
+            m_lastConnectionError = "Небезопасное подключение: " + reason + ".";
             logError("TLS ошибка: " + reason + ".");
             if (m_authDialog)
-                m_authDialog->showError("Небезопасное подключение: " + reason + ".");
+                m_authDialog->showError(m_lastConnectionError);
             return false;
         }
     }
@@ -896,11 +900,24 @@ bool MainWindow::verifyServerCertificate(bool allowTrustOnFirstUse, const QList<
 
         const QString reason = "сертификат сервера изменился";
         logError("TLS ошибка: " + reason + ".");
-        if (m_authDialog)
+        const QString message = "Сертификат сервера изменился.\n\n"
+                                "Сохраненный отпечаток:\n" + storedFingerprint +
+                                "\n\nНовый отпечаток:\n" + fingerprintHex +
+                                "\n\nЕсли вы переустановили сервер или заменили сертификат, можно доверить новому сертификату.";
+        if (QMessageBox::warning(this,
+                                 "Сертификат сервера изменился",
+                                 message,
+                                 QMessageBox::Yes | QMessageBox::No,
+                                 QMessageBox::No) == QMessageBox::Yes)
         {
-            m_authDialog->showError("Небезопасное подключение: " + reason +
-                                    ". Если это плановая замена сервера, сбросьте сохраненный pin вручную.");
+            settings.setValue(settingsKey, fingerprintHex);
+            logSystem("Новый TLS-сертификат сервера подтвержден пользователем и сохранен.");
+            return true;
         }
+
+        m_lastConnectionError = "Небезопасное подключение: " + reason + ".";
+        if (m_authDialog)
+            m_authDialog->showError(m_lastConnectionError);
         return false;
     }
 
@@ -919,9 +936,10 @@ bool MainWindow::verifyServerCertificate(bool allowTrustOnFirstUse, const QList<
     }
 
     const QString reason = "сертификат сервера еще не доверен";
+    m_lastConnectionError = "Небезопасное подключение: " + reason + ".";
     logError("TLS ошибка: " + reason + ".");
     if (m_authDialog)
-        m_authDialog->showError("Небезопасное подключение: " + reason + ".");
+        m_authDialog->showError(m_lastConnectionError);
     return false;
 }
 
@@ -952,7 +970,7 @@ void MainWindow::onDisconnected()
 
     if (m_authDialog)
     {
-        m_authDialog->showError("Соединение с сервером потеряно.");
+        m_authDialog->showError(m_lastConnectionError.isEmpty() ? "Соединение с сервером потеряно." : m_lastConnectionError);
     }
     else if (!m_exiting)
     {
@@ -991,11 +1009,12 @@ void MainWindow::onReadyRead()
 void MainWindow::onError(QAbstractSocket::SocketError socketError)
 {
     Q_UNUSED(socketError);
+    m_lastConnectionError = "Не удалось подключиться: " + m_socket->errorString();
     logError("Ошибка: " + m_socket->errorString());
     ui->buttonDisconnect->setEnabled(m_authenticated);
     if (m_authDialog)
     {
-        m_authDialog->showError("Не удалось подключиться: " + m_socket->errorString());
+        m_authDialog->showError(m_lastConnectionError);
     }
 }
 

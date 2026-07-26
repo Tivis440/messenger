@@ -145,6 +145,8 @@ QWidget *AuthDialog::createRegisterPage()
 
     m_registerNameEdit->setText(generatePublicId());
     m_registerNameEdit->setReadOnly(true);
+    m_registerNameEdit->setMinimumWidth(340);
+    m_registerNameEdit->setCursorPosition(0);
     m_registerNameEdit->setToolTip("Это ваш случайный публичный ID. Его можно передать контакту для добавления.");
     m_registerPasswordEdit->setPlaceholderText("Пароль");
     m_registerPasswordConfirmEdit->setPlaceholderText("Повторите пароль");

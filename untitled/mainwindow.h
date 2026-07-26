@@ -95,6 +95,7 @@ private:
     bool m_authenticated;
     QTimer *m_heartbeatTimer;
     class AuthDialog *m_authDialog = nullptr;
+    QString m_lastConnectionError;
     bool m_exiting = false;
     QString m_selectedPeer;
     struct ChatLine
