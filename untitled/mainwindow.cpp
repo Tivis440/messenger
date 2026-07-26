@@ -59,6 +59,7 @@ static QString statusLabel(const QString &status)
 }
 
 static const QList<QByteArray> DEFAULT_PINNED_SERVER_CERT_SHA256 = {
+    QByteArray::fromHex("903B6169F2D03CD85406D0A216CB38E46376AC8819201FEA5C531D16884E746D")
 };
 
 static QString configuredServerHost()
@@ -77,21 +78,6 @@ static quint16 configuredServerPort()
 static QString certificateFingerprintHex(const QSslCertificate &certificate)
 {
     return QString::fromLatin1(certificate.digest(QCryptographicHash::Sha256).toHex().toUpper());
-}
-
-static bool isTofuCompatibleSslError(QSslError::SslError error)
-{
-    switch (error)
-    {
-    case QSslError::SelfSignedCertificate:
-    case QSslError::SelfSignedCertificateInChain:
-    case QSslError::UnableToGetIssuerCertificate:
-    case QSslError::UnableToVerifyFirstCertificate:
-    case QSslError::HostNameMismatch:
-        return true;
-    default:
-        return false;
-    }
 }
 
 static QSslConfiguration tofuTlsConfiguration(QSslSocket *socket)
@@ -809,7 +795,7 @@ void MainWindow::onConnected()
 
 void MainWindow::onEncrypted()
 {
-    if (!verifyServerCertificate(true))
+    if (!verifyServerCertificate(false))
     {
         m_socket->abort();
         return;
@@ -830,7 +816,7 @@ void MainWindow::onEncrypted()
 
 void MainWindow::onSslErrors(const QList<QSslError> &errors)
 {
-    if (verifyServerCertificate(true, errors))
+    if (verifyServerCertificate(false, errors))
         m_socket->ignoreSslErrors(errors);
     else
         m_socket->abort();
@@ -871,17 +857,7 @@ bool MainWindow::verifyServerCertificate(bool allowTrustOnFirstUse, const QList<
     }
 
     for (const QSslError &error : errors)
-    {
-        if (!isTofuCompatibleSslError(error.error()))
-        {
-            const QString reason = "сертификат сервера отклонен TLS-проверкой";
-            m_lastConnectionError = "Небезопасное подключение: " + reason + ".";
-            logError("TLS ошибка: " + reason + ".");
-            if (m_authDialog)
-                m_authDialog->showError(m_lastConnectionError);
-            return false;
-        }
-    }
+        logSystem("TLS предупреждение Qt: " + error.errorString());
 
     const QByteArray fingerprint = peerCertificate.digest(QCryptographicHash::Sha256);
     const QString fingerprintHex = certificateFingerprintHex(peerCertificate);
@@ -889,6 +865,14 @@ bool MainWindow::verifyServerCertificate(bool allowTrustOnFirstUse, const QList<
     QSettings settings;
     const QString settingsKey = serverPinSettingsKey();
     const QString storedFingerprint = settings.value(settingsKey).toString().trimmed().toUpper();
+
+    if (DEFAULT_PINNED_SERVER_CERT_SHA256.contains(fingerprint))
+    {
+        if (storedFingerprint != fingerprintHex)
+            settings.setValue(settingsKey, fingerprintHex);
+        logSystem("Сертификат сервера проверен по встроенному отпечатку.");
+        return true;
+    }
 
     if (!storedFingerprint.isEmpty())
     {
@@ -919,13 +903,6 @@ bool MainWindow::verifyServerCertificate(bool allowTrustOnFirstUse, const QList<
         if (m_authDialog)
             m_authDialog->showError(m_lastConnectionError);
         return false;
-    }
-
-    if (DEFAULT_PINNED_SERVER_CERT_SHA256.contains(fingerprint))
-    {
-        settings.setValue(settingsKey, fingerprintHex);
-        logSystem("Сертификат сервера проверен по встроенному отпечатку и сохранен локально.");
-        return true;
     }
 
     if (allowTrustOnFirstUse)
