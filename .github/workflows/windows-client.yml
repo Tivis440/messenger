@@ -153,7 +153,7 @@ jobs:
             Where-Object { $_.Name -eq "signal_protocol.h" -or $_.Name -eq "signal-protocol-c.lib" } |
             Select-Object FullName
 
-      - name: Build messenger.exe
+      - name: Configure messenger.exe
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build | Out-Null
@@ -162,6 +162,12 @@ jobs:
             "SIGNAL_DIR=${env:GITHUB_WORKSPACE}\deps\signal" `
             "OPENSSL_DIR=${env:GITHUB_WORKSPACE}\deps\openssl" `
             CONFIG+=release
+          Pop-Location
+
+      - name: Build messenger.exe
+        shell: pwsh
+        run: |
+          Push-Location build
           nmake
           Pop-Location
 
