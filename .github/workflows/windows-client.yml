@@ -40,49 +40,25 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          choco install openssl.light -y --no-progress
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "openssl.light was not installed, trying openssl package..."
-            choco install openssl -y --no-progress
-            if ($LASTEXITCODE -ne 0) {
-              throw "Chocolatey could not install OpenSSL."
-            }
+          $url = "https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-3.5.7.zip"
+          $expectedHash = "2591459A06A6DF2D2E2B23B02A28D7C180B95C02FB4965099A708B7365A74014"
+          $archive = "$env:RUNNER_TEMP\openssl-3.5.7.zip"
+          $extractDir = "$env:RUNNER_TEMP\openssl-3.5.7"
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          $actualHash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($actualHash -ne $expectedHash) {
+            throw "OpenSSL archive SHA256 mismatch. Expected $expectedHash, got $actualHash."
           }
 
-          $roots = @(
-            "C:\Program Files\OpenSSL-Win64",
-            "C:\Program Files\OpenSSL",
-            "C:\OpenSSL-Win64",
-            "C:\tools\OpenSSL-Win64",
-            "C:\ProgramData\chocolatey\lib\openssl.light",
-            "C:\ProgramData\chocolatey\lib\openssl"
-          ) | Where-Object { Test-Path $_ }
-          $opensslRoot = $roots | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $opensslRoot) {
-            throw "OpenSSL installation directory was not found."
-          }
-          Write-Host "OpenSSL root: $opensslRoot"
-
-          $includeDir = Get-ChildItem $opensslRoot -Directory -Recurse |
-            Where-Object { Test-Path (Join-Path $_.FullName "openssl\evp.h") } |
-            Select-Object -First 1
-          $cryptoLib = Get-ChildItem $opensslRoot -Recurse -Filter libcrypto.lib | Select-Object -First 1
-          if (-not $includeDir -or -not $cryptoLib) {
-            Get-ChildItem $opensslRoot -Recurse -Include evp.h,libcrypto.lib,libssl.lib | Select-Object FullName
-            throw "OpenSSL headers or libcrypto.lib were not found in $opensslRoot."
-          }
-          Write-Host "OpenSSL include: $($includeDir.FullName)"
-          Write-Host "OpenSSL libcrypto: $($cryptoLib.FullName)"
-
+          Expand-Archive -Path $archive -DestinationPath $extractDir -Force
           New-Item -ItemType Directory -Force deps\openssl\include deps\openssl\lib deps\openssl\bin | Out-Null
-          Copy-Item "$($includeDir.FullName)\*" deps\openssl\include\ -Recurse -Force
-          Copy-Item $cryptoLib.FullName deps\openssl\lib\libcrypto.lib -Force
-          $sslLib = Get-ChildItem $opensslRoot -Recurse -Filter libssl.lib | Select-Object -First 1
-          if ($sslLib) {
-            Copy-Item $sslLib.FullName deps\openssl\lib\libssl.lib -Force
-          }
-          Get-ChildItem $opensslRoot -Recurse -Include libcrypto*.dll,libssl*.dll |
-            Copy-Item -Destination deps\openssl\bin\ -Force
+          Copy-Item "$extractDir\x64\include\*" deps\openssl\include\ -Recurse -Force
+          Copy-Item "$extractDir\x64\lib\libcrypto.lib" deps\openssl\lib\libcrypto.lib -Force
+          Copy-Item "$extractDir\x64\lib\libssl.lib" deps\openssl\lib\libssl.lib -Force
+          Copy-Item "$extractDir\x64\bin\libcrypto*.dll" deps\openssl\bin\ -Force
+          Copy-Item "$extractDir\x64\bin\libssl*.dll" deps\openssl\bin\ -Force
+          Get-ChildItem deps\openssl -Recurse -Include evp.h,libcrypto.lib,libssl.lib,libcrypto*.dll,libssl*.dll |
+            Select-Object FullName
 
       - name: Build libsignal-protocol-c
         shell: pwsh
@@ -96,6 +72,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_INSTALL_PREFIX="${env:GITHUB_WORKSPACE}\deps\signal" `
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            -DOPENSSL_ROOT_DIR="${env:GITHUB_WORKSPACE}\deps\openssl" `
             -DBUILD_TESTING=OFF
           cmake --build deps/libsignal-protocol-c-build --config Release
           cmake --install deps/libsignal-protocol-c-build
