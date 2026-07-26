@@ -39,24 +39,40 @@ jobs:
       - name: Install OpenSSL
         shell: pwsh
         run: |
-          choco install openssl -y --no-progress
+          $ErrorActionPreference = "Stop"
+          choco install openssl.light -y --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "openssl.light was not installed, trying openssl package..."
+            choco install openssl -y --no-progress
+            if ($LASTEXITCODE -ne 0) {
+              throw "Chocolatey could not install OpenSSL."
+            }
+          }
+
           $roots = @(
             "C:\Program Files\OpenSSL-Win64",
             "C:\Program Files\OpenSSL",
-            "C:\OpenSSL-Win64"
-          )
+            "C:\OpenSSL-Win64",
+            "C:\tools\OpenSSL-Win64",
+            "C:\ProgramData\chocolatey\lib\openssl.light",
+            "C:\ProgramData\chocolatey\lib\openssl"
+          ) | Where-Object { Test-Path $_ }
           $opensslRoot = $roots | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $opensslRoot) {
             throw "OpenSSL installation directory was not found."
           }
+          Write-Host "OpenSSL root: $opensslRoot"
 
           $includeDir = Get-ChildItem $opensslRoot -Directory -Recurse |
             Where-Object { Test-Path (Join-Path $_.FullName "openssl\evp.h") } |
             Select-Object -First 1
           $cryptoLib = Get-ChildItem $opensslRoot -Recurse -Filter libcrypto.lib | Select-Object -First 1
           if (-not $includeDir -or -not $cryptoLib) {
+            Get-ChildItem $opensslRoot -Recurse -Include evp.h,libcrypto.lib,libssl.lib | Select-Object FullName
             throw "OpenSSL headers or libcrypto.lib were not found in $opensslRoot."
           }
+          Write-Host "OpenSSL include: $($includeDir.FullName)"
+          Write-Host "OpenSSL libcrypto: $($cryptoLib.FullName)"
 
           New-Item -ItemType Directory -Force deps\openssl\include deps\openssl\lib deps\openssl\bin | Out-Null
           Copy-Item "$($includeDir.FullName)\*" deps\openssl\include\ -Recurse -Force
