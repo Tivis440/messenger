@@ -70,14 +70,20 @@ jobs:
           $ErrorActionPreference = "Stop"
           $extractDir = "$env:RUNNER_TEMP\openssl-3.5.7"
           $includeDir = Get-ChildItem $extractDir -Directory -Recurse |
-            Where-Object { Test-Path (Join-Path $_.FullName "openssl\evp.h") } |
+            Where-Object { $_.FullName -like "*\x64\*" -and (Test-Path (Join-Path $_.FullName "openssl\evp.h")) } |
             Select-Object -First 1
-          $cryptoLib = Get-ChildItem $extractDir -Recurse -Filter libcrypto.lib | Select-Object -First 1
-          $sslLib = Get-ChildItem $extractDir -Recurse -Filter libssl.lib | Select-Object -First 1
-          $dlls = Get-ChildItem $extractDir -Recurse -Include libcrypto*.dll,libssl*.dll
+          $cryptoLib = Get-ChildItem $extractDir -Recurse -File -Filter libcrypto.lib |
+            Where-Object { $_.FullName -like "*\x64\*" } |
+            Select-Object -First 1
+          $sslLib = Get-ChildItem $extractDir -Recurse -File -Filter libssl.lib |
+            Where-Object { $_.FullName -like "*\x64\*" } |
+            Select-Object -First 1
+          $dlls = Get-ChildItem $extractDir -Recurse -File |
+            Where-Object { $_.FullName -like "*\x64\*" -and ($_.Name -like "libcrypto*.dll" -or $_.Name -like "libssl*.dll") }
 
           if (-not $includeDir -or -not $cryptoLib -or -not $sslLib -or -not $dlls) {
-            Get-ChildItem $extractDir -Recurse -Include evp.h,libcrypto.lib,libssl.lib,libcrypto*.dll,libssl*.dll |
+            Get-ChildItem $extractDir -Recurse -File |
+              Where-Object { $_.Name -in @("evp.h", "libcrypto.lib", "libssl.lib") -or $_.Name -like "libcrypto*.dll" -or $_.Name -like "libssl*.dll" } |
               Select-Object FullName
             throw "OpenSSL files were not found after extraction."
           }
@@ -87,7 +93,8 @@ jobs:
           Copy-Item $cryptoLib.FullName deps\openssl\lib\libcrypto.lib -Force
           Copy-Item $sslLib.FullName deps\openssl\lib\libssl.lib -Force
           $dlls | Copy-Item -Destination deps\openssl\bin\ -Force
-          Get-ChildItem deps\openssl -Recurse -Include evp.h,libcrypto.lib,libssl.lib,libcrypto*.dll,libssl*.dll |
+          Get-ChildItem deps\openssl -Recurse -File |
+            Where-Object { $_.Name -in @("evp.h", "libcrypto.lib", "libssl.lib") -or $_.Name -like "libcrypto*.dll" -or $_.Name -like "libssl*.dll" } |
             Select-Object FullName
 
       - name: Build libsignal-protocol-c
