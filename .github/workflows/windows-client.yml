@@ -103,6 +103,18 @@ jobs:
           New-Item -ItemType Directory -Force deps | Out-Null
           git clone --depth 1 https://github.com/signalapp/libsignal-protocol-c.git deps/libsignal-protocol-c-src
 
+      - name: Patch libsignal-protocol-c for MSVC
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $curveCmake = "deps\libsignal-protocol-c-src\src\curve25519\CMakeLists.txt"
+          $content = Get-Content $curveCmake -Raw
+          $content = $content -replace "\r?\n\s*ed25519/tests/internal_fast_tests\.c", ""
+          Set-Content -Path $curveCmake -Value $content -NoNewline
+          Get-Content $curveCmake | Select-String "internal_fast_tests" -Quiet | ForEach-Object {
+            if ($_) { throw "Failed to remove internal_fast_tests.c from curve25519 build." }
+          }
+
       - name: Configure libsignal-protocol-c
         shell: pwsh
         run: |
@@ -113,6 +125,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_INSTALL_PREFIX="${env:GITHUB_WORKSPACE}\deps\signal" `
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            -DCMAKE_C_FLAGS="/D_WINDOWS /D_CRT_SECURE_NO_WARNINGS" `
             -DOPENSSL_ROOT_DIR="${env:GITHUB_WORKSPACE}\deps\openssl" `
             -DBUILD_TESTING=OFF
 
