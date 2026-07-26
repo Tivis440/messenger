@@ -88,7 +88,7 @@ jobs:
             throw "OpenSSL files were not found after extraction."
           }
 
-          New-Item -ItemType Directory -Force deps\openssl\include deps\openssl\lib deps\openssl\bin | Out-Null
+          New-Item -ItemType Directory -Force -Path deps\openssl\include, deps\openssl\lib, deps\openssl\bin | Out-Null
           Copy-Item "$($includeDir.FullName)\*" deps\openssl\include\ -Recurse -Force
           Copy-Item $cryptoLib.FullName deps\openssl\lib\libcrypto.lib -Force
           Copy-Item $sslLib.FullName deps\openssl\lib\libssl.lib -Force
