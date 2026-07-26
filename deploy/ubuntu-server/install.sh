@@ -11,7 +11,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 apt-get update
-apt-get install -y build-essential qt6-base-dev libargon2-dev pkg-config
+apt-get install -y build-essential qt6-base-dev libargon2-dev openssl pkg-config
 
 mkdir -p "$APP_DIR" "$DATA_DIR"
 cp -R protocol.h server "$APP_DIR/"
@@ -40,7 +40,12 @@ fi
 chmod 600 "$DATA_DIR/tls_server.key"
 chmod 600 "$DATA_DIR"/*.json
 
+FINGERPRINT="$(openssl x509 -in "$DATA_DIR/tls_server.crt" -outform der | openssl dgst -sha256 -hex | awk '{print toupper($NF)}')"
+printf '%s\n' "$FINGERPRINT" > "$DATA_DIR/tls_server.sha256"
+chmod 644 "$DATA_DIR/tls_server.crt" "$DATA_DIR/tls_server.sha256"
+
 echo "Server built: $APP_DIR/server/server"
 echo "Run: $APP_DIR/server/server --port $PORT --data-dir $DATA_DIR"
 echo "Certificate fingerprint for client pinning:"
-openssl x509 -in "$DATA_DIR/tls_server.crt" -outform der | openssl dgst -sha256 -binary | xxd -p -c 256 | tr '[:lower:]' '[:upper:]'
+echo "$FINGERPRINT"
+echo "Fingerprint file: $DATA_DIR/tls_server.sha256"

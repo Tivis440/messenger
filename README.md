@@ -33,4 +33,8 @@ macOS-клиент собирается в `messenger.app`, Windows-клиент
 ## Важно про TLS
 
 Сертификат сервера не коммитится в git. При установке на Ubuntu `install.sh` создаст новый dev-сертификат, если его нет.
-После замены сертификата нужно обновить pinned SHA-256 fingerprint в клиенте перед сборкой клиента.
+После установки можно автоматически забрать сертификат с сервера и обновить pinned SHA-256 fingerprint в клиенте:
+
+```bash
+sh deploy/client/update-pinned-cert.sh --ssh user@server-ip
+```
