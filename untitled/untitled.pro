@@ -38,6 +38,7 @@ unix:!macx {
 }
 
 win32 {
+    DEFINES += _WINDOWS
     isEmpty(SIGNAL_DIR) {
         SIGNAL_DIR = C:/signal-protocol-c
     }
