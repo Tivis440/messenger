@@ -168,8 +168,24 @@ jobs:
         shell: pwsh
         run: |
           Push-Location build
-          nmake
+          $output = nmake 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Tee-Object -FilePath "${env:GITHUB_WORKSPACE}\windows-nmake.log"
           Pop-Location
+          if ($exitCode -ne 0) {
+            exit $exitCode
+          }
+
+      - name: Report Windows build errors
+        if: failure()
+        shell: pwsh
+        run: |
+          $log = "${env:GITHUB_WORKSPACE}\windows-nmake.log"
+          if (Test-Path $log) {
+            Get-Content $log |
+              Select-String -Pattern "error|fatal|LNK[0-9]+|C[0-9]{4}" |
+              ForEach-Object { Write-Host "::error::$($_.Line)" }
+          }
 
       - name: Deploy Qt runtime
         shell: pwsh
@@ -189,3 +205,11 @@ jobs:
           name: messenger-windows
           path: messenger-windows.zip
           if-no-files-found: error
+
+      - name: Upload Windows build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-log
+          path: windows-nmake.log
+          if-no-files-found: ignore
