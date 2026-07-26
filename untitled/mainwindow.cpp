@@ -94,6 +94,14 @@ static bool isTofuCompatibleSslError(QSslError::SslError error)
     }
 }
 
+static QSslConfiguration tofuTlsConfiguration(QSslSocket *socket)
+{
+    QSslConfiguration tlsConfig = socket->sslConfiguration();
+    tlsConfig.setProtocol(QSsl::TlsV1_2OrLater);
+    tlsConfig.setPeerVerifyMode(QSslSocket::VerifyNone);
+    return tlsConfig;
+}
+
 static QColor avatarColor(const QString &name)
 {
     return DesignTokens::avatarColor(name, QApplication::palette());
@@ -520,9 +528,7 @@ void MainWindow::startLogin(const QString &username, const QString &password)
 
     const QString host = configuredServerHost();
     const quint16 port = configuredServerPort();
-    QSslConfiguration tlsConfig = m_socket->sslConfiguration();
-    tlsConfig.setProtocol(QSsl::TlsV1_2OrLater);
-    m_socket->setSslConfiguration(tlsConfig);
+    m_socket->setSslConfiguration(tofuTlsConfiguration(m_socket));
 
     logSystem("Защищенное подключение к " + host + ":" + QString::number(port) + "...");
     ui->label_server->setText(QString("ретранслятор %1:%2  /  TLS").arg(host).arg(port));
@@ -556,9 +562,7 @@ void MainWindow::startRegistration(const QString &username, const QString &passw
 
     const QString host = configuredServerHost();
     const quint16 port = configuredServerPort();
-    QSslConfiguration tlsConfig = m_socket->sslConfiguration();
-    tlsConfig.setProtocol(QSsl::TlsV1_2OrLater);
-    m_socket->setSslConfiguration(tlsConfig);
+    m_socket->setSslConfiguration(tofuTlsConfiguration(m_socket));
 
     logSystem("Защищенное подключение к " + host + ":" + QString::number(port) + " для регистрации...");
     ui->label_server->setText(QString("ретранслятор %1:%2  /  TLS").arg(host).arg(port));
