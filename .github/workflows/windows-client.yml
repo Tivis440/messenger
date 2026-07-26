@@ -97,11 +97,15 @@ jobs:
             Where-Object { $_.Name -in @("evp.h", "libcrypto.lib", "libssl.lib") -or $_.Name -like "libcrypto*.dll" -or $_.Name -like "libssl*.dll" } |
             Select-Object FullName
 
-      - name: Build libsignal-protocol-c
+      - name: Clone libsignal-protocol-c
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force deps | Out-Null
           git clone --depth 1 https://github.com/signalapp/libsignal-protocol-c.git deps/libsignal-protocol-c-src
+
+      - name: Configure libsignal-protocol-c
+        shell: pwsh
+        run: |
           cmake `
             -S deps/libsignal-protocol-c-src `
             -B deps/libsignal-protocol-c-build `
@@ -111,8 +115,24 @@ jobs:
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
             -DOPENSSL_ROOT_DIR="${env:GITHUB_WORKSPACE}\deps\openssl" `
             -DBUILD_TESTING=OFF
+
+      - name: Build libsignal-protocol-c
+        shell: pwsh
+        run: |
           cmake --build deps/libsignal-protocol-c-build --config Release
+
+      - name: Install libsignal-protocol-c
+        shell: pwsh
+        run: |
           cmake --install deps/libsignal-protocol-c-build
+          $signalLib = Get-ChildItem deps\signal -Recurse -File -Filter "*.lib" | Select-Object -First 1
+          if (-not $signalLib) {
+            throw "libsignal-protocol-c .lib file was not installed."
+          }
+          New-Item -ItemType Directory -Force -Path deps\signal\lib | Out-Null
+          Copy-Item $signalLib.FullName deps\signal\lib\signal-protocol-c.lib -Force
+          Get-ChildItem deps\signal -Recurse -File -Include signal_protocol.h,signal-protocol-c.lib |
+            Select-Object FullName
 
       - name: Build messenger.exe
         shell: pwsh
