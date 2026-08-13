@@ -31,7 +31,7 @@ AuthDialog::AuthDialog(QWidget *parent)
 
     QLabel *title = new QLabel("Вход", this);
     title->setObjectName("authTitle");
-    QLabel *subtitle = new QLabel("Вход в защищенные личные диалоги", this);
+    QLabel *subtitle = new QLabel("Вход в личные диалоги", this);
     subtitle->setObjectName("authSubtitle");
     subtitle->setAlignment(Qt::AlignCenter);
     subtitle->setWordWrap(true);

@@ -72,7 +72,7 @@ static QString endpointString(const QString &host, quint16 port)
 
 static QString peerStatusText(bool online)
 {
-    return online ? "защищено / в сети" : "защищено / не в сети";
+    return online ? "в сети" : "не в сети";
 }
 
 static bool isValidAccountName(const QString &username)
@@ -248,10 +248,8 @@ void MainWindow::setupUI()
     headerPanel->setObjectName("chatHeader");
     m_chatTitleLabel = new QLabel("Выберите собеседника", headerPanel);
     m_chatTitleLabel->setObjectName("chatTitle");
-    m_chatStatusLabel = new QLabel("защищенный канал готов", headerPanel);
+    m_chatStatusLabel = new QLabel("Выберите диалог", headerPanel);
     m_chatStatusLabel->setObjectName("chatStatus");
-    QLabel *securityBadge = new QLabel("защищено", headerPanel);
-    securityBadge->setObjectName("securityBadge");
     QVBoxLayout *headerTextLayout = new QVBoxLayout;
     headerTextLayout->setContentsMargins(0, 0, 0, 0);
     headerTextLayout->setSpacing(2);
@@ -260,7 +258,6 @@ void MainWindow::setupUI()
     QHBoxLayout *headerLayout = new QHBoxLayout(headerPanel);
     headerLayout->setContentsMargins(22, 14, 22, 14);
     headerLayout->addLayout(headerTextLayout, 1);
-    headerLayout->addWidget(securityBadge, 0, Qt::AlignVCenter);
 
     QWidget *chatPanel = new QWidget(ui->centralwidget);
     chatPanel->setObjectName("chatPanel");
@@ -505,7 +502,7 @@ void MainWindow::startLogin(const QString &username, const QString &password)
     m_serverPort = FIXED_SERVER_PORT;
     m_socket->setSslConfiguration(tofuTlsConfiguration(m_socket));
 
-    logSystem("Защищенное подключение к " + endpointString(m_serverHost, m_serverPort) + "...");
+    logSystem("TLS подключение к " + endpointString(m_serverHost, m_serverPort) + "...");
     m_socket->connectToHostEncrypted(m_serverHost, m_serverPort);
 }
 
@@ -537,7 +534,7 @@ void MainWindow::startRegistration(const QString &username, const QString &passw
     m_serverPort = FIXED_SERVER_PORT;
     m_socket->setSslConfiguration(tofuTlsConfiguration(m_socket));
 
-    logSystem("Защищенное подключение к " + endpointString(m_serverHost, m_serverPort) + " для регистрации...");
+    logSystem("TLS подключение к " + endpointString(m_serverHost, m_serverPort) + " для регистрации...");
     m_socket->connectToHostEncrypted(m_serverHost, m_serverPort);
 }
 
@@ -642,7 +639,6 @@ void MainWindow::onProfile()
     QLineEdit *usernameEdit = new QLineEdit(m_currentUsername, &dialog);
     usernameEdit->setReadOnly(true);
 
-    QPushButton *copyUsernameButton = new QPushButton("Копировать имя", &dialog);
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
     buttons->button(QDialogButtonBox::Close)->setText("Закрыть");
 
@@ -650,26 +646,17 @@ void MainWindow::onProfile()
     form->setVerticalSpacing(12);
     form->addRow("Имя", usernameEdit);
 
-    QHBoxLayout *copyLayout = new QHBoxLayout;
-    copyLayout->addWidget(copyUsernameButton);
-    copyLayout->addStretch(1);
-
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
     layout->setContentsMargins(24, 22, 24, 20);
     layout->setSpacing(14);
     layout->addWidget(title);
     layout->addWidget(hint);
     layout->addLayout(form);
-    layout->addLayout(copyLayout);
     layout->addWidget(buttons);
 
     dialog.setStyleSheet(DesignTokens::authStyleSheet(QApplication::palette()) +
                          "QDialogButtonBox QPushButton { min-width: 92px; }");
 
-    connect(copyUsernameButton, &QPushButton::clicked, this, [this]() {
-        QApplication::clipboard()->setText(m_currentUsername);
-        ui->statusbar->showMessage("Имя пользователя скопировано", 2500);
-    });
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     dialog.exec();
 }
@@ -687,7 +674,7 @@ void MainWindow::onEncrypted()
         return;
     }
 
-    logSystem("Защищенный канал TLS установлен.");
+    logSystem("TLS канал установлен.");
     if (m_pendingRegister)
     {
         logSystem("Отправка запроса регистрации...");
