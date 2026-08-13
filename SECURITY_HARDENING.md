@@ -10,6 +10,7 @@
 - Login, registration, message, and prekey request rate limits are enforced in memory.
 - Offline messages are capped per recipient and expire after 30 days.
 - New registrations use human-readable usernames.
+- Legacy `nlk_...` account identifiers are rejected.
 - Contacts are added by username.
 - Runtime logs avoid message bodies, passwords, and prekey payloads; usernames should be hashed or minimized in production logs where practical.
 - Local Signal state is encrypted with AES-256-GCM; on macOS the state key is stored in Keychain.
@@ -40,3 +41,4 @@ A contact is added through that username.
 
 The current concept no longer targets anonymity. The security focus is encrypted message content,
 mandatory TLS transport, local key protection, password hardening, and identity-key verification.
+Legacy `nlk_...` identifiers should be removed from server state with `deploy/ubuntu-server/reset-accounts.sh`.

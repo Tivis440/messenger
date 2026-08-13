@@ -114,6 +114,7 @@ team_dev
 ```
 
 Анонимная модель с random public ID убрана. Теперь проект ведет себя как обычный мессенджер с username, но сохраняет шифрование сообщений.
+Старые аккаунты и контакты формата `nlk_...` больше не поддерживаются.
 
 ## Безопасность
 
@@ -194,6 +195,16 @@ sudo systemctl status messenger.service --no-pager
 sudo journalctl -u messenger.service -n 80 --no-pager
 sudo ss -lntp | grep 5555
 ```
+
+Удалить все старые аккаунты, prekeys и offline-очереди на сервере:
+
+```bash
+cd messenger
+git pull
+sudo sh deploy/ubuntu-server/reset-accounts.sh
+```
+
+Скрипт очищает только account/message state. TLS-сертификат и ключ сервера остаются на месте.
 
 По умолчанию:
 
