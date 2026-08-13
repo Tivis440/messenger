@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption({{"p", "port"}, "Порт сервера.", "port", QString::number(Protocol::DEFAULT_PORT)});
-    parser.addOption({{"d", "data-dir"}, "Папка для users.json, prekey_bundles.json, offline_messages.json и TLS-сертификатов.", "path"});
+    parser.addOption({{"d", "data-dir"}, "Папка для TLS-сертификатов и одноразового импорта старых JSON-файлов.", "path"});
     parser.process(app);
 
     bool portOk = false;

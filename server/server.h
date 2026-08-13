@@ -3,9 +3,9 @@
 
 #include <QTcpServer>
 #include <QSslSocket>
+#include <QSqlDatabase>
 #include <QObject>
 #include <QHash>
-#include <QJsonArray>
 #include <QJsonObject>
 #include <QSet>
 #include <QDateTime>
@@ -100,12 +100,18 @@ private:
     void queueOfflineMessage(const Message &msg);
     void deliverOfflineMessages(const QString &username, ClientSession *session);
     void broadcastUserList();
+    bool openDatabase();
+    bool migrateDatabase();
+    void migrateLegacyJsonFiles();
+    bool legacyJsonHasBeenImported() const;
+    void markLegacyJsonImported();
+    QJsonObject passwordEntryForUser(const QString &username) const;
+    bool savePasswordEntry(const QString &username, const QJsonObject &entry);
+    QStringList registeredUsers() const;
 
     QHash<QString, ClientSession *> m_clients; // username -> session
     QSet<ClientSession *> m_sessions;
-    QJsonObject m_userDb;
-    QJsonObject m_offlineDb;
-    QJsonObject m_preKeyBundles;
+    QSqlDatabase m_db;
     QElapsedTimer m_rateClock;
     QHash<QString, ServerRateWindow> m_authRate;
     QHash<QString, ServerRateWindow> m_messageRate;
@@ -117,12 +123,7 @@ private:
     QString m_preKeyBundlesFile;
     QString m_certificateFile;
     QString m_privateKeyFile;
-    bool loadUsers();
-    bool saveUsers();
-    bool loadOfflineMessages();
-    bool saveOfflineMessages();
-    bool loadPreKeyBundles();
-    bool savePreKeyBundles();
+    bool m_storageReady = false;
     bool userExists(const QString &username) const;
     bool verifyPassword(const QString &username, const QString &password);
     bool registerUser(const QString &username, const QString &password);

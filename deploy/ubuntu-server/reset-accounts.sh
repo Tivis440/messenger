@@ -3,9 +3,17 @@ set -eu
 
 DATA_DIR="${DATA_DIR:-/var/lib/messenger}"
 SERVICE_NAME="${SERVICE_NAME:-messenger.service}"
+DB_NAME="${DB_NAME:-messenger}"
+DB_USER="${DB_USER:-messenger}"
+DB_PASSWORD_FILE="${DB_PASSWORD_FILE:-$DATA_DIR/postgres_password}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Run as root: sudo DATA_DIR=$DATA_DIR sh deploy/ubuntu-server/reset-accounts.sh"
+    exit 1
+fi
+
+if [ ! -f "$DB_PASSWORD_FILE" ]; then
+    echo "PostgreSQL password file not found: $DB_PASSWORD_FILE"
     exit 1
 fi
 
@@ -13,18 +21,16 @@ if systemctl list-unit-files "$SERVICE_NAME" >/dev/null 2>&1; then
     systemctl stop "$SERVICE_NAME" || true
 fi
 
-mkdir -p "$DATA_DIR"
-printf '{}\n' > "$DATA_DIR/users.json"
-printf '{}\n' > "$DATA_DIR/prekey_bundles.json"
-printf '{}\n' > "$DATA_DIR/offline_messages.json"
-
-if id messenger >/dev/null 2>&1; then
-    chown messenger:messenger "$DATA_DIR/users.json" "$DATA_DIR/prekey_bundles.json" "$DATA_DIR/offline_messages.json"
-fi
-chmod 600 "$DATA_DIR/users.json" "$DATA_DIR/prekey_bundles.json" "$DATA_DIR/offline_messages.json"
+DB_PASSWORD="$(cat "$DB_PASSWORD_FILE")"
+export PGPASSWORD="$DB_PASSWORD"
+psql "postgresql://$DB_USER@127.0.0.1:5432/$DB_NAME" -v ON_ERROR_STOP=1 <<SQL
+TRUNCATE TABLE offline_messages, prekey_bundles, users RESTART IDENTITY CASCADE;
+DELETE FROM schema_meta WHERE key = 'legacy_json_imported';
+SQL
+unset PGPASSWORD
 
 if systemctl list-unit-files "$SERVICE_NAME" >/dev/null 2>&1; then
     systemctl start "$SERVICE_NAME"
 fi
 
-echo "All accounts, prekeys, and offline messages were removed from $DATA_DIR."
+echo "All accounts, prekeys, and offline messages were removed from PostgreSQL database $DB_NAME."

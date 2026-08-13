@@ -7,10 +7,11 @@
 
 ## Общие зависимости
 
-- Qt 6 с модулями `Core`, `Network`, `Widgets`.
+- Qt 6 с модулями `Core`, `Network`, `Widgets`, `Sql`.
 - OpenSSL crypto library для клиента.
 - `libsignal-protocol-c` для клиента.
 - `libargon2` для сервера.
+- PostgreSQL и Qt PostgreSQL driver для сервера.
 
 ## Сервер: папка данных
 
@@ -33,17 +34,18 @@ cd server
 MESSENGER_SERVER_DATA_DIR=/path/to/server-data server
 ```
 
-В этой папке должны лежать:
+В этой папке должны лежать TLS-файлы:
 
 - `tls_server.crt`
 - `tls_server.key`
-- `users.json`
-- `prekey_bundles.json`
-- `offline_messages.json`
 
-Если JSON-файлов нет, сервер создаст их при первой записи. Сертификат и ключ нужно положить заранее.
+Серверные данные хранятся в PostgreSQL. Перед запуском нужно задать `MESSENGER_DATABASE_URL`, например:
 
-Сейчас `server/data` уже содержит текущие `tls_server.crt`, `tls_server.key` и пустые JSON-хранилища.
+```bash
+export MESSENGER_DATABASE_URL=postgres://messenger:password@127.0.0.1:5432/messenger
+```
+
+Старые `users.json`, `prekey_bundles.json` и `offline_messages.json` из data-dir импортируются один раз, если они существуют.
 
 ## Адрес сервера в клиенте
 
@@ -90,6 +92,7 @@ make -j"$(nproc)"
 ```bash
 mkdir -p ./data
 cp tls_server.crt tls_server.key ./data/
+export MESSENGER_DATABASE_URL=postgres://messenger:password@127.0.0.1:5432/messenger
 ./server --port 5555 --data-dir ./data
 ```
 
@@ -99,6 +102,7 @@ cp tls_server.crt tls_server.key ./data/
 
 - Qt 6 для MSVC или MinGW.
 - `libargon2`.
+- PostgreSQL client libraries and Qt SQL PostgreSQL driver.
 
 Если Argon2 лежит не в `C:/argon2`, передать путь в qmake:
 
@@ -117,6 +121,7 @@ mingw32-make
 Запуск:
 
 ```bat
+set MESSENGER_DATABASE_URL=postgres://messenger:password@127.0.0.1:5432/messenger
 server.exe --port 5555 --data-dir C:\messenger-server-data
 ```
 

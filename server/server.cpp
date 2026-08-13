@@ -10,10 +10,13 @@
 #include <QMessageAuthenticationCode>
 #include <QRandomGenerator>
 #include <QDir>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QSslCertificate>
 #include <QSslConfiguration>
 #include <QSslError>
 #include <QSslKey>
+#include <QUrl>
 
 #include <argon2.h>
 
@@ -114,64 +117,6 @@ ClientSession::ClientSession(qintptr socketDescriptor,
 
 // ---------------- User DB helpers (Server) ----------------
 
-bool Server::loadUsers()
-{
-    if (m_usersFile.isEmpty())
-        m_usersFile = QCoreApplication::applicationDirPath() + QDir::separator() + "users.json";
-
-    QFile f(m_usersFile);
-    if (!f.exists())
-        return true; // no users yet
-
-    if (!f.open(QIODevice::ReadOnly))
-    {
-        qWarning() << "Не удалось открыть файл пользователей:" << m_usersFile;
-        return false;
-    }
-
-    QByteArray data = f.readAll();
-    f.close();
-
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (!doc.isObject())
-        return false;
-
-    m_userDb = doc.object();
-    return true;
-}
-
-bool Server::saveUsers()
-{
-    if (m_usersFile.isEmpty())
-        m_usersFile = QCoreApplication::applicationDirPath() + QDir::separator() + "users.json";
-
-    QFile f(m_usersFile);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-    {
-        qWarning() << "Не удалось сохранить пользователей в:" << m_usersFile << f.errorString();
-        return false;
-    }
-
-    QJsonDocument doc(m_userDb);
-    f.write(doc.toJson());
-    f.close();
-    QFile::setPermissions(m_usersFile, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    return true;
-}
-
-static QJsonObject messageToJson(const Message &msg)
-{
-    QJsonObject object;
-    object.insert("type", static_cast<int>(msg.type));
-    object.insert("sender", msg.sender);
-    object.insert("receiver", msg.receiver);
-    object.insert("content", msg.content);
-    object.insert("id", msg.id);
-    object.insert("timestamp", QString::number(msg.timestamp));
-    object.insert("responseCode", static_cast<int>(msg.responseCode));
-    return object;
-}
-
 static Message messageFromJson(const QJsonObject &object)
 {
     Message msg;
@@ -185,93 +130,264 @@ static Message messageFromJson(const QJsonObject &object)
     return msg;
 }
 
-bool Server::loadOfflineMessages()
+static QString databaseUrlFromEnvironment()
 {
-    if (m_offlineMessagesFile.isEmpty())
-        m_offlineMessagesFile = QCoreApplication::applicationDirPath() + QDir::separator() + "offline_messages.json";
+    QString url = QString::fromLocal8Bit(qgetenv("MESSENGER_DATABASE_URL")).trimmed();
+    if (url.isEmpty())
+        url = QString::fromLocal8Bit(qgetenv("DATABASE_URL")).trimmed();
+    return url;
+}
 
-    QFile f(m_offlineMessagesFile);
-    if (!f.exists())
+bool Server::openDatabase()
+{
+    const QString databaseUrl = databaseUrlFromEnvironment();
+    if (databaseUrl.isEmpty())
+    {
+        qCritical() << "PostgreSQL не настроен: задайте MESSENGER_DATABASE_URL.";
+        return false;
+    }
+
+    const QUrl url(databaseUrl);
+    if (!url.isValid() || (url.scheme() != "postgres" && url.scheme() != "postgresql"))
+    {
+        qCritical() << "Некорректный MESSENGER_DATABASE_URL. Ожидается postgres://user:password@host:5432/database";
+        return false;
+    }
+
+    const QString connectionName = "messenger-postgres";
+    if (QSqlDatabase::contains(connectionName))
+        m_db = QSqlDatabase::database(connectionName);
+    else
+        m_db = QSqlDatabase::addDatabase("QPSQL", connectionName);
+
+    m_db.setHostName(url.host());
+    m_db.setPort(url.port(5432));
+    m_db.setDatabaseName(url.path().mid(1));
+    m_db.setUserName(url.userName(QUrl::FullyDecoded));
+    m_db.setPassword(url.password(QUrl::FullyDecoded));
+    if (url.query().contains("sslmode=require") || QString::fromLocal8Bit(qgetenv("MESSENGER_DATABASE_SSLMODE")) == "require")
+        m_db.setConnectOptions("requiressl=1");
+
+    if (!m_db.open())
+    {
+        qCritical() << "Не удалось подключиться к PostgreSQL:" << m_db.lastError().text();
+        return false;
+    }
+
+    qInfo() << "PostgreSQL подключен:" << url.host() << url.path();
+    return true;
+}
+
+static bool execSql(QSqlQuery &query, const QString &sql)
+{
+    if (query.exec(sql))
         return true;
 
-    if (!f.open(QIODevice::ReadOnly))
-    {
-        qWarning() << "Не удалось открыть файл офлайн-сообщений:" << m_offlineMessagesFile;
-        return false;
-    }
-
-    QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
-    f.close();
-    if (!doc.isObject())
-        return false;
-
-    m_offlineDb = doc.object();
-    return true;
+    qCritical() << "SQL ошибка:" << query.lastError().text() << "query=" << sql;
+    return false;
 }
 
-bool Server::saveOfflineMessages()
+bool Server::migrateDatabase()
 {
-    if (m_offlineMessagesFile.isEmpty())
-        m_offlineMessagesFile = QCoreApplication::applicationDirPath() + QDir::separator() + "offline_messages.json";
-
-    QFile f(m_offlineMessagesFile);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-    {
-        qWarning() << "Не удалось сохранить офлайн-сообщения:" << m_offlineMessagesFile;
-        return false;
-    }
-
-    f.write(QJsonDocument(m_offlineDb).toJson(QJsonDocument::Indented));
-    f.close();
-    QFile::setPermissions(m_offlineMessagesFile, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    return true;
-}
-
-bool Server::loadPreKeyBundles()
-{
-    if (m_preKeyBundlesFile.isEmpty())
-        m_preKeyBundlesFile = QCoreApplication::applicationDirPath() + QDir::separator() + "prekey_bundles.json";
-
-    QFile f(m_preKeyBundlesFile);
-    if (!f.exists())
-        return true;
-
-    if (!f.open(QIODevice::ReadOnly))
-    {
-        qWarning() << "Не удалось открыть файл Signal bundles:" << m_preKeyBundlesFile;
-        return false;
-    }
-
-    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
-    f.close();
-    if (!doc.isObject())
+    QSqlQuery query(m_db);
+    if (!execSql(query, "CREATE TABLE IF NOT EXISTS users ("
+                        "username TEXT PRIMARY KEY,"
+                        "password_json TEXT NOT NULL,"
+                        "created_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
+                        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"))
         return false;
 
-    m_preKeyBundles = doc.object();
-    return true;
-}
-
-bool Server::savePreKeyBundles()
-{
-    if (m_preKeyBundlesFile.isEmpty())
-        m_preKeyBundlesFile = QCoreApplication::applicationDirPath() + QDir::separator() + "prekey_bundles.json";
-
-    QFile f(m_preKeyBundlesFile);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-    {
-        qWarning() << "Не удалось сохранить Signal bundles:" << m_preKeyBundlesFile;
+    if (!execSql(query, "CREATE TABLE IF NOT EXISTS prekey_bundles ("
+                        "username TEXT PRIMARY KEY REFERENCES users(username) ON DELETE CASCADE,"
+                        "bundle_json TEXT NOT NULL,"
+                        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"))
         return false;
-    }
 
-    f.write(QJsonDocument(m_preKeyBundles).toJson(QJsonDocument::Indented));
-    f.close();
-    QFile::setPermissions(m_preKeyBundlesFile, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (!execSql(query, "CREATE TABLE IF NOT EXISTS offline_messages ("
+                        "id BIGSERIAL PRIMARY KEY,"
+                        "receiver TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,"
+                        "message_type INTEGER NOT NULL,"
+                        "sender TEXT NOT NULL,"
+                        "content TEXT NOT NULL,"
+                        "message_id TEXT,"
+                        "message_timestamp BIGINT NOT NULL,"
+                        "response_code INTEGER NOT NULL DEFAULT 0,"
+                        "created_at TIMESTAMPTZ NOT NULL DEFAULT now())"))
+        return false;
+
+    if (!execSql(query, "CREATE INDEX IF NOT EXISTS offline_messages_receiver_id_idx "
+                        "ON offline_messages(receiver, id)"))
+        return false;
+
+    if (!execSql(query, "CREATE TABLE IF NOT EXISTS schema_meta ("
+                        "key TEXT PRIMARY KEY,"
+                        "value TEXT NOT NULL,"
+                        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"))
+        return false;
+
     return true;
 }
 
 bool Server::userExists(const QString &username) const
 {
-    return m_userDb.contains(username);
+    QSqlQuery query(m_db);
+    query.prepare("SELECT 1 FROM users WHERE username = :username");
+    query.bindValue(":username", username);
+    return query.exec() && query.next();
+}
+
+QJsonObject Server::passwordEntryForUser(const QString &username) const
+{
+    QSqlQuery query(m_db);
+    query.prepare("SELECT password_json FROM users WHERE username = :username");
+    query.bindValue(":username", username);
+    if (!query.exec() || !query.next())
+        return {};
+
+    const QJsonDocument document = QJsonDocument::fromJson(query.value(0).toString().toUtf8());
+    return document.isObject() ? document.object() : QJsonObject();
+}
+
+bool Server::savePasswordEntry(const QString &username, const QJsonObject &entry)
+{
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE users SET password_json = :password_json, updated_at = now() WHERE username = :username");
+    query.bindValue(":username", username);
+    query.bindValue(":password_json", QString::fromUtf8(QJsonDocument(entry).toJson(QJsonDocument::Compact)));
+    if (!query.exec())
+    {
+        qWarning() << "Не удалось обновить пароль пользователя:" << query.lastError().text();
+        return false;
+    }
+    return query.numRowsAffected() == 1;
+}
+
+QStringList Server::registeredUsers() const
+{
+    QStringList users;
+    QSqlQuery query(m_db);
+    if (!query.exec("SELECT username FROM users ORDER BY username"))
+    {
+        qWarning() << "Не удалось получить пользователей:" << query.lastError().text();
+        return users;
+    }
+
+    while (query.next())
+        users.append(query.value(0).toString());
+
+    return users;
+}
+
+bool Server::legacyJsonHasBeenImported() const
+{
+    QSqlQuery query(m_db);
+    query.prepare("SELECT value FROM schema_meta WHERE key = 'legacy_json_imported'");
+    return query.exec() && query.next() && query.value(0).toString() == "1";
+}
+
+void Server::markLegacyJsonImported()
+{
+    QSqlQuery query(m_db);
+    query.prepare("INSERT INTO schema_meta(key, value, updated_at) VALUES('legacy_json_imported', '1', now()) "
+                  "ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()");
+    if (!query.exec())
+        qWarning() << "Не удалось сохранить флаг импорта JSON:" << query.lastError().text();
+}
+
+static QJsonObject readJsonObjectFile(const QString &path)
+{
+    QFile file(path);
+    if (!file.exists() || !file.open(QIODevice::ReadOnly))
+        return {};
+
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    return document.isObject() ? document.object() : QJsonObject();
+}
+
+void Server::migrateLegacyJsonFiles()
+{
+    if (legacyJsonHasBeenImported())
+        return;
+
+    QSqlQuery countQuery(m_db);
+    if (!countQuery.exec("SELECT COUNT(*) FROM users") || !countQuery.next() || countQuery.value(0).toLongLong() > 0)
+    {
+        markLegacyJsonImported();
+        return;
+    }
+
+    const QJsonObject users = readJsonObjectFile(m_usersFile);
+    const QJsonObject preKeys = readJsonObjectFile(m_preKeyBundlesFile);
+    const QJsonObject offline = readJsonObjectFile(m_offlineMessagesFile);
+
+    if (users.isEmpty() && preKeys.isEmpty() && offline.isEmpty())
+    {
+        markLegacyJsonImported();
+        return;
+    }
+
+    if (!m_db.transaction())
+    {
+        qWarning() << "Не удалось начать транзакцию импорта JSON:" << m_db.lastError().text();
+        return;
+    }
+
+    QSqlQuery userQuery(m_db);
+    userQuery.prepare("INSERT INTO users(username, password_json) VALUES(:username, :password_json) "
+                      "ON CONFLICT(username) DO NOTHING");
+    for (auto it = users.begin(); it != users.end(); ++it)
+    {
+        userQuery.bindValue(":username", it.key());
+        userQuery.bindValue(":password_json", QString::fromUtf8(QJsonDocument(it.value().toObject()).toJson(QJsonDocument::Compact)));
+        if (!userQuery.exec())
+            qWarning() << "Не удалось импортировать пользователя:" << userQuery.lastError().text();
+    }
+
+    QSqlQuery preKeyQuery(m_db);
+    preKeyQuery.prepare("INSERT INTO prekey_bundles(username, bundle_json) VALUES(:username, :bundle_json) "
+                        "ON CONFLICT(username) DO UPDATE SET bundle_json = EXCLUDED.bundle_json, updated_at = now()");
+    for (auto it = preKeys.begin(); it != preKeys.end(); ++it)
+    {
+        if (!userExists(it.key()))
+            continue;
+        preKeyQuery.bindValue(":username", it.key());
+        preKeyQuery.bindValue(":bundle_json", it.value().toString());
+        if (!preKeyQuery.exec())
+            qWarning() << "Не удалось импортировать prekey bundle:" << preKeyQuery.lastError().text();
+    }
+
+    QSqlQuery offlineQuery(m_db);
+    offlineQuery.prepare("INSERT INTO offline_messages(receiver, message_type, sender, content, message_id, message_timestamp, response_code) "
+                         "VALUES(:receiver, :message_type, :sender, :content, :message_id, :message_timestamp, :response_code)");
+    for (auto it = offline.begin(); it != offline.end(); ++it)
+    {
+        if (!userExists(it.key()))
+            continue;
+        const QJsonArray queue = it.value().toArray();
+        for (const QJsonValue &value : queue)
+        {
+            const Message msg = messageFromJson(value.toObject());
+            offlineQuery.bindValue(":receiver", it.key());
+            offlineQuery.bindValue(":message_type", static_cast<int>(msg.type));
+            offlineQuery.bindValue(":sender", msg.sender);
+            offlineQuery.bindValue(":content", msg.content);
+            offlineQuery.bindValue(":message_id", msg.id);
+            offlineQuery.bindValue(":message_timestamp", static_cast<qlonglong>(msg.timestamp));
+            offlineQuery.bindValue(":response_code", static_cast<int>(msg.responseCode));
+            if (!offlineQuery.exec())
+                qWarning() << "Не удалось импортировать offline-сообщение:" << offlineQuery.lastError().text();
+        }
+    }
+
+    markLegacyJsonImported();
+    if (!m_db.commit())
+    {
+        qWarning() << "Не удалось завершить импорт JSON:" << m_db.lastError().text();
+        m_db.rollback();
+        return;
+    }
+
+    qInfo() << "Старые JSON-файлы импортированы в PostgreSQL.";
 }
 
 static bool isValidUsername(const QString &username)
@@ -394,9 +510,9 @@ static QJsonObject makePasswordEntry(const QString &password)
 
 bool Server::verifyPassword(const QString &username, const QString &password)
 {
-    if (!m_userDb.contains(username))
+    const QJsonObject obj = passwordEntryForUser(username);
+    if (obj.isEmpty())
         return false;
-    QJsonObject obj = m_userDb.value(username).toObject();
 
     if (obj.value("algorithm").toString() == "argon2id")
     {
@@ -434,8 +550,7 @@ bool Server::verifyPassword(const QString &username, const QString &password)
         const bool pbkdf2Ok = constantTimeEquals(hash, storedHash);
         if (pbkdf2Ok)
         {
-            m_userDb.insert(username, makePasswordEntry(password));
-            saveUsers();
+            savePasswordEntry(username, makePasswordEntry(password));
         }
         return pbkdf2Ok;
     }
@@ -445,8 +560,7 @@ bool Server::verifyPassword(const QString &username, const QString &password)
     const bool legacyOk = makeLegacyHash(password, salt) == hash;
     if (legacyOk)
     {
-        m_userDb.insert(username, makePasswordEntry(password));
-        saveUsers();
+        savePasswordEntry(username, makePasswordEntry(password));
     }
     return legacyOk;
 }
@@ -455,11 +569,19 @@ bool Server::registerUser(const QString &username, const QString &password)
 {
     if (!isValidUsername(username) || password.size() < PASSWORD_MIN_LENGTH)
         return false;
-    if (m_userDb.contains(username))
+    if (userExists(username))
         return false;
 
-    m_userDb.insert(username, makePasswordEntry(password));
-    return saveUsers();
+    QSqlQuery query(m_db);
+    query.prepare("INSERT INTO users(username, password_json) VALUES(:username, :password_json)");
+    query.bindValue(":username", username);
+    query.bindValue(":password_json", QString::fromUtf8(QJsonDocument(makePasswordEntry(password)).toJson(QJsonDocument::Compact)));
+    if (!query.exec())
+    {
+        qWarning() << "Не удалось зарегистрировать пользователя:" << query.lastError().text();
+        return false;
+    }
+    return true;
 }
 
 ClientSession::~ClientSession()
@@ -749,9 +871,9 @@ Server::Server(const QString &dataDir, QObject *parent)
     m_preKeyBundlesFile = dir.filePath("prekey_bundles.json");
     m_certificateFile = dir.filePath("tls_server.crt");
     m_privateKeyFile = dir.filePath("tls_server.key");
-    loadUsers();
-    loadOfflineMessages();
-    loadPreKeyBundles();
+    m_storageReady = openDatabase() && migrateDatabase();
+    if (m_storageReady)
+        migrateLegacyJsonFiles();
 }
 
 bool Server::allowAuthAttempt(const QString &username)
@@ -802,6 +924,12 @@ Server::~Server()
 
 bool Server::startServer(quint16 port)
 {
+    if (!m_storageReady)
+    {
+        qCritical() << "Сервер не запущен: PostgreSQL-хранилище не готово.";
+        return false;
+    }
+
     if (listen(QHostAddress::Any, port))
     {
         qInfo() << "Сервер запущен на порту" << port;
@@ -953,14 +1081,23 @@ void Server::storePreKeyBundle(const Message &msg)
 {
     if (!msg.sender.isEmpty() && !msg.content.isEmpty())
     {
-        m_preKeyBundles.insert(msg.sender, msg.content);
-        savePreKeyBundles();
+        QSqlQuery query(m_db);
+        query.prepare("INSERT INTO prekey_bundles(username, bundle_json) VALUES(:username, :bundle_json) "
+                      "ON CONFLICT(username) DO UPDATE SET bundle_json = EXCLUDED.bundle_json, updated_at = now()");
+        query.bindValue(":username", msg.sender);
+        query.bindValue(":bundle_json", msg.content);
+        if (!query.exec())
+            qWarning() << "Не удалось сохранить prekey bundle:" << query.lastError().text();
     }
 }
 
 void Server::sendPreKeyBundle(const Message &msg, ClientSession *sender)
 {
-    QJsonObject storedBundle = QJsonDocument::fromJson(m_preKeyBundles.value(msg.receiver).toString().toUtf8()).object();
+    QSqlQuery query(m_db);
+    query.prepare("SELECT bundle_json FROM prekey_bundles WHERE username = :username");
+    query.bindValue(":username", msg.receiver);
+    const QString bundleJson = query.exec() && query.next() ? query.value(0).toString() : QString();
+    QJsonObject storedBundle = QJsonDocument::fromJson(bundleJson.toUtf8()).object();
     QJsonArray preKeys = storedBundle.value("preKeys").toArray();
 
     Message response;
@@ -983,53 +1120,88 @@ void Server::sendPreKeyBundle(const Message &msg, ClientSession *sender)
     storedBundle.insert("preKeys", preKeys);
     response.content = QString::fromUtf8(QJsonDocument(storedBundle).toJson(QJsonDocument::Compact));
 
-    m_preKeyBundles.insert(msg.receiver, QString::fromUtf8(QJsonDocument(storedBundle).toJson(QJsonDocument::Compact)));
-    savePreKeyBundles();
+    QSqlQuery updateQuery(m_db);
+    updateQuery.prepare("UPDATE prekey_bundles SET bundle_json = :bundle_json, updated_at = now() WHERE username = :username");
+    updateQuery.bindValue(":username", msg.receiver);
+    updateQuery.bindValue(":bundle_json", QString::fromUtf8(QJsonDocument(storedBundle).toJson(QJsonDocument::Compact)));
+    if (!updateQuery.exec())
+        qWarning() << "Не удалось обновить prekey bundle:" << updateQuery.lastError().text();
     sender->sendMessage(response);
 }
 
 void Server::queueOfflineMessage(const Message &msg)
 {
-    QJsonArray queue = m_offlineDb.value(msg.receiver).toArray();
     const quint64 now = QDateTime::currentSecsSinceEpoch();
-    QJsonArray compacted;
-    for (const QJsonValue &value : queue)
-    {
-        const Message queued = messageFromJson(value.toObject());
-        if (queued.timestamp != 0 && now - queued.timestamp <= OFFLINE_MESSAGE_TTL_SECONDS)
-            compacted.append(value);
-    }
-
     Message stored = msg;
     if (stored.timestamp == 0)
         stored.timestamp = now;
-    compacted.append(messageToJson(stored));
-    while (compacted.size() > MAX_OFFLINE_MESSAGES_PER_USER)
-        compacted.removeAt(0);
 
-    queue = compacted;
-    m_offlineDb.insert(msg.receiver, queue);
-    saveOfflineMessages();
+    QSqlQuery cleanupQuery(m_db);
+    cleanupQuery.prepare("DELETE FROM offline_messages WHERE receiver = :receiver AND message_timestamp < :expires_before");
+    cleanupQuery.bindValue(":receiver", msg.receiver);
+    cleanupQuery.bindValue(":expires_before", static_cast<qlonglong>(now - OFFLINE_MESSAGE_TTL_SECONDS));
+    if (!cleanupQuery.exec())
+        qWarning() << "Не удалось очистить просроченные offline-сообщения:" << cleanupQuery.lastError().text();
+
+    QSqlQuery insertQuery(m_db);
+    insertQuery.prepare("INSERT INTO offline_messages(receiver, message_type, sender, content, message_id, message_timestamp, response_code) "
+                        "VALUES(:receiver, :message_type, :sender, :content, :message_id, :message_timestamp, :response_code)");
+    insertQuery.bindValue(":receiver", msg.receiver);
+    insertQuery.bindValue(":message_type", static_cast<int>(stored.type));
+    insertQuery.bindValue(":sender", stored.sender);
+    insertQuery.bindValue(":content", stored.content);
+    insertQuery.bindValue(":message_id", stored.id);
+    insertQuery.bindValue(":message_timestamp", static_cast<qlonglong>(stored.timestamp));
+    insertQuery.bindValue(":response_code", static_cast<int>(stored.responseCode));
+    if (!insertQuery.exec())
+    {
+        qWarning() << "Не удалось сохранить offline-сообщение:" << insertQuery.lastError().text();
+        return;
+    }
+
+    QSqlQuery trimQuery(m_db);
+    trimQuery.prepare("DELETE FROM offline_messages WHERE id IN ("
+                      "SELECT id FROM offline_messages WHERE receiver = :receiver ORDER BY id DESC OFFSET :keep_count)");
+    trimQuery.bindValue(":receiver", msg.receiver);
+    trimQuery.bindValue(":keep_count", MAX_OFFLINE_MESSAGES_PER_USER);
+    if (!trimQuery.exec())
+        qWarning() << "Не удалось ограничить offline-очередь:" << trimQuery.lastError().text();
 }
 
 void Server::deliverOfflineMessages(const QString &username, ClientSession *session)
 {
-    QJsonArray queue = m_offlineDb.value(username).toArray();
-    if (queue.isEmpty())
+    const quint64 now = QDateTime::currentSecsSinceEpoch();
+    QSqlQuery query(m_db);
+    query.prepare("SELECT message_type, sender, content, message_id, message_timestamp, response_code "
+                  "FROM offline_messages WHERE receiver = :receiver ORDER BY id");
+    query.bindValue(":receiver", username);
+    if (!query.exec())
     {
+        qWarning() << "Не удалось получить offline-сообщения:" << query.lastError().text();
         return;
     }
 
-    const quint64 now = QDateTime::currentSecsSinceEpoch();
-    for (const QJsonValue &value : queue)
+    while (query.next())
     {
-        Message msg = messageFromJson(value.toObject());
+        Message msg;
+        msg.type = static_cast<quint32>(query.value(0).toInt());
+        msg.sender = query.value(1).toString();
+        msg.receiver = username;
+        msg.content = query.value(2).toString();
+        msg.id = query.value(3).toString();
+        msg.timestamp = static_cast<quint64>(query.value(4).toLongLong());
+        msg.responseCode = static_cast<quint32>(query.value(5).toInt());
         if (msg.timestamp != 0 && now - msg.timestamp <= OFFLINE_MESSAGE_TTL_SECONDS)
+        {
             session->sendMessage(msg);
+        }
     }
 
-    m_offlineDb.remove(username);
-    saveOfflineMessages();
+    QSqlQuery deleteQuery(m_db);
+    deleteQuery.prepare("DELETE FROM offline_messages WHERE receiver = :receiver");
+    deleteQuery.bindValue(":receiver", username);
+    if (!deleteQuery.exec())
+        qWarning() << "Не удалось удалить доставленные offline-сообщения:" << deleteQuery.lastError().text();
 }
 
 void Server::broadcastUserList()
@@ -1038,7 +1210,8 @@ void Server::broadcastUserList()
     listMsg.type = Protocol::MSG_USER_LIST;
     listMsg.sender = "SERVER";
     QStringList users;
-    for (const QString &username : m_userDb.keys())
+    const QStringList allUsers = registeredUsers();
+    for (const QString &username : allUsers)
     {
         users.append(username + "|" + (m_clients.contains(username) ? "1" : "0"));
     }

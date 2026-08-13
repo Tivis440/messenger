@@ -154,7 +154,7 @@ team_dev
 
 - Независимый аудит криптографии и протокола.
 - Защита от replay на уровне протокольных сценариев.
-- Перенос server storage с JSON на SQLite/PostgreSQL.
+- Резервное копирование и мониторинг PostgreSQL.
 - Более строгая защита метаданных при необходимости отдельного privacy-режима.
 - Reproducible builds.
 - Code signing и notarization для macOS.
@@ -179,6 +179,7 @@ sudo sh deploy/ubuntu-server/install.sh
 
 - установит системные зависимости;
 - создаст пользователя `messenger`;
+- установит PostgreSQL и создаст базу `messenger`;
 - соберет сервер в `/opt/messenger/server/server`;
 - создаст data-dir `/var/lib/messenger`;
 - создаст dev TLS-сертификат, если его еще нет;
@@ -337,21 +338,20 @@ Data-dir сервера содержит:
 
 ```text
 /var/lib/messenger
-├── users.json
-├── prekey_bundles.json
-├── offline_messages.json
+├── postgres_password
 ├── tls_server.crt
 ├── tls_server.key
 └── tls_server.sha256
 ```
 
-`tls_server.key` должен быть доступен только системному пользователю сервиса. JSON-хранилища подходят для прототипа, но для длительной эксплуатации лучше перейти на SQLite/PostgreSQL.
+Пользователи, prekey bundles и offline queue хранятся в PostgreSQL. Старые JSON-файлы из data-dir импортируются один раз при первом запуске после миграции.
+
+`tls_server.key` и `postgres_password` должны быть доступны только системному пользователю сервиса.
 
 ## Roadmap
 
-- SQLite/PostgreSQL вместо JSON storage.
-- Миграции схемы базы данных.
-- Более строгая offline queue: TTL jobs, per-user quotas, transactional delivery.
+- Версионированные миграции схемы базы данных.
+- Более строгая offline queue: фоновые TTL jobs и transactional delivery.
 - Предупреждение при смене identity key контакта.
 - Sealed Sender-like envelope.
 - Более приватный contact discovery.

@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/messenger/server
+Environment=MESSENGER_DATABASE_URL=postgres://messenger:change-me@127.0.0.1:5432/messenger
 ExecStart=/opt/messenger/server/server --port 5555 --data-dir /var/lib/messenger
 Restart=on-failure
 RestartSec=3
