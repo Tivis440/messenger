@@ -84,8 +84,6 @@ static bool isValidAccountName(const QString &username)
 {
     if (username.isEmpty() || username != username.trimmed() || username.size() > 64)
         return false;
-    if (username.startsWith("nlk_", Qt::CaseInsensitive))
-        return false;
 
     for (const QChar ch : username)
     {

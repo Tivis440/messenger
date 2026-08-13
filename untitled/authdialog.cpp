@@ -235,12 +235,6 @@ bool AuthDialog::validateCredentials(const QString &username, const QString &pas
         return false;
     }
 
-    if (username.startsWith("nlk_", Qt::CaseInsensitive))
-    {
-        showError("Старые nlk-ID больше не поддерживаются. Зарегистрируйте обычное имя пользователя.");
-        return false;
-    }
-
     for (const QChar ch : username)
     {
         const bool allowed = ch.isLetterOrNumber() || ch == '_' || ch == '-' || ch == '.';
