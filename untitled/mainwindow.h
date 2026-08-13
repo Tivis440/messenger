@@ -42,7 +42,6 @@ private slots:
     void on_lineEdit_message_returnPressed();
     void on_buttonRegister_clicked();
     void onUserSelected();
-    void onAddContact();
     void onRemoveContact();
     void onProfile();
 
@@ -119,7 +118,6 @@ private:
     class QLabel *m_chatStatusLabel = nullptr;
     class QListWidget *m_messageList = nullptr;
     class QLineEdit *m_contactSearchEdit = nullptr;
-    class QPushButton *m_addContactButton = nullptr;
     class QPushButton *m_removeContactButton = nullptr;
     class QPushButton *m_profileButton = nullptr;
     class QSplitter *m_splitter = nullptr;

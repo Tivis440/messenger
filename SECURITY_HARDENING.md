@@ -10,7 +10,7 @@
 - Login, registration, message, and prekey request rate limits are enforced in memory.
 - Offline messages are capped per recipient and expire after 30 days.
 - New registrations use human-readable usernames.
-- Contacts are added by username.
+- Users and local dialogs are found through a unified username/dialog search.
 - Runtime logs avoid message bodies, passwords, and prekey payloads; usernames should be hashed or minimized in production logs where practical.
 - Local Signal state is encrypted with AES-256-GCM; on macOS the state key is stored in Keychain.
 - Peer identity fingerprints are exposed in the chat header as safety numbers.
@@ -36,7 +36,7 @@ The encrypted Signal state format is platform-neutral AES-256-GCM. Only the stat
 ## Account Model
 
 The server account identifier is a human-readable username, for example `alice` or `user.name`.
-A contact is added through that username.
+A conversation is started through that username.
 
 The security focus is encrypted message content, mandatory TLS transport, local key protection,
 password hardening, and identity-key verification.

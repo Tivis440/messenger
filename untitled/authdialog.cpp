@@ -124,7 +124,7 @@ QWidget *AuthDialog::createRegisterPage()
 
     m_registerNameEdit->setPlaceholderText("Например, kirill или user.name");
     m_registerNameEdit->setMinimumWidth(340);
-    m_registerNameEdit->setToolTip("Это имя будет использоваться для входа и добавления контактов.");
+    m_registerNameEdit->setToolTip("Это имя будет использоваться для входа и поиска собеседников.");
     m_registerPasswordEdit->setPlaceholderText("Пароль");
     m_registerPasswordConfirmEdit->setPlaceholderText("Повторите пароль");
     m_registerPasswordEdit->setEchoMode(QLineEdit::Password);

@@ -227,7 +227,7 @@ void MainWindow::setupUI()
 
     ui->lineEdit_message->setPlaceholderText("Сообщение...");
     ui->lineEdit_message->setAccessibleName("Поле ввода сообщения");
-    ui->lineEdit_message->setAccessibleDescription("Введите сообщение выбранному контакту");
+    ui->lineEdit_message->setAccessibleDescription("Введите сообщение выбранному собеседнику");
     ui->textEdit->setReadOnly(true);
     ui->textEdit->setAcceptRichText(true);
     ui->listWidget_users->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -250,7 +250,7 @@ void MainWindow::setupUI()
 
     QWidget *headerPanel = new QWidget(ui->centralwidget);
     headerPanel->setObjectName("chatHeader");
-    m_chatTitleLabel = new QLabel("Выберите контакт", headerPanel);
+    m_chatTitleLabel = new QLabel("Выберите собеседника", headerPanel);
     m_chatTitleLabel->setObjectName("chatTitle");
     m_chatStatusLabel = new QLabel("защищенный канал готов", headerPanel);
     m_chatStatusLabel->setObjectName("chatStatus");
@@ -313,8 +313,8 @@ void MainWindow::setupUI()
 
     m_contactSearchEdit = new QLineEdit(sidePanel);
     m_contactSearchEdit->setObjectName("contactSearch");
-    m_contactSearchEdit->setPlaceholderText("Поиск...");
-    m_contactSearchEdit->setAccessibleName("Поиск контактов");
+    m_contactSearchEdit->setPlaceholderText("Поиск пользователей и диалогов...");
+    m_contactSearchEdit->setAccessibleName("Поиск пользователей и диалогов");
     sideLayout->addWidget(m_contactSearchEdit);
 
     ui->label_online->setContentsMargins(20, 18, 20, 0);
@@ -325,21 +325,15 @@ void MainWindow::setupUI()
     contactsHeaderLayout->setSpacing(8);
     ui->label_online->setContentsMargins(0, 0, 0, 0);
     contactsHeaderLayout->addWidget(ui->label_online, 1);
-    m_addContactButton = new QPushButton("+", contactsHeader);
-    m_addContactButton->setObjectName("contactToolButton");
-    m_addContactButton->setToolTip("Добавить контакт");
-    m_addContactButton->setAccessibleName("Добавить контакт");
-    m_addContactButton->setEnabled(false);
     m_removeContactButton = new QPushButton("−", contactsHeader);
     m_removeContactButton->setObjectName("contactToolButton");
-    m_removeContactButton->setToolTip("Удалить выбранный контакт");
-    m_removeContactButton->setAccessibleName("Удалить выбранный контакт");
+    m_removeContactButton->setToolTip("Убрать выбранный диалог из списка");
+    m_removeContactButton->setAccessibleName("Убрать выбранный диалог из списка");
     m_removeContactButton->setEnabled(false);
-    contactsHeaderLayout->addWidget(m_addContactButton);
     contactsHeaderLayout->addWidget(m_removeContactButton);
     sideLayout->addWidget(contactsHeader);
     ui->listWidget_users->setIconSize(QSize(40, 40));
-    ui->listWidget_users->setAccessibleName("Контакты");
+    ui->listWidget_users->setAccessibleName("Диалоги и пользователи");
     ui->listWidget_users->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     sideLayout->addWidget(ui->listWidget_users, 1);
     ui->label_server->setObjectName("serverLabel");
@@ -386,7 +380,6 @@ void MainWindow::setupConnections()
     m_heartbeatTimer->setInterval(30000);
 
     connect(ui->listWidget_users, &QListWidget::itemClicked, this, &MainWindow::onUserSelected);
-    connect(m_addContactButton, &QPushButton::clicked, this, &MainWindow::onAddContact);
     connect(m_removeContactButton, &QPushButton::clicked, this, &MainWindow::onRemoveContact);
     connect(m_profileButton, &QPushButton::clicked, this, &MainWindow::onProfile);
     connect(m_contactSearchEdit, &QLineEdit::textChanged, this, [this]() {
@@ -397,10 +390,6 @@ void MainWindow::setupConnections()
 void MainWindow::setupMenus()
 {
     QMenu *fileMenu = menuBar()->addMenu("Файл");
-    QAction *newChatAction = fileMenu->addAction("Новый контакт");
-    newChatAction->setShortcut(QKeySequence("Meta+N"));
-    connect(newChatAction, &QAction::triggered, this, &MainWindow::onAddContact);
-    fileMenu->addSeparator();
     QAction *closeAction = fileMenu->addAction("Закрыть окно");
     closeAction->setShortcut(QKeySequence::Close);
     connect(closeAction, &QAction::triggered, this, &QWidget::close);
@@ -432,7 +421,7 @@ void MainWindow::setupMenus()
     });
 
     QMenu *viewMenu = menuBar()->addMenu("Вид");
-    QAction *focusSearchAction = viewMenu->addAction("Поиск контактов");
+    QAction *focusSearchAction = viewMenu->addAction("Поиск пользователей и диалогов");
     focusSearchAction->setShortcut(QKeySequence("Meta+K"));
     connect(focusSearchAction, &QAction::triggered, this, [this]() {
         if (m_contactSearchEdit)
@@ -443,7 +432,7 @@ void MainWindow::setupMenus()
     QAction *profileAction = conversationMenu->addAction("Мой профиль");
     profileAction->setShortcut(QKeySequence("Meta+,"));
     connect(profileAction, &QAction::triggered, this, &MainWindow::onProfile);
-    QAction *removeContactAction = conversationMenu->addAction("Удалить контакт");
+    QAction *removeContactAction = conversationMenu->addAction("Убрать из списка");
     connect(removeContactAction, &QAction::triggered, this, &MainWindow::onRemoveContact);
 
     QMenu *windowMenu = menuBar()->addMenu("Окно");
@@ -593,6 +582,11 @@ void MainWindow::onUserSelected()
     }
 
     m_selectedPeer = item->data(Qt::UserRole).toString();
+    if (!m_contacts.contains(m_selectedPeer))
+    {
+        m_contacts.insert(m_selectedPeer);
+        saveConversations();
+    }
     const bool online = item->data(Qt::UserRole + 1).toBool();
     m_chatTitleLabel->setText(contactDisplayName(m_selectedPeer));
     const QString fingerprint = m_signalManager.identityFingerprint(m_selectedPeer);
@@ -624,94 +618,12 @@ void MainWindow::on_lineEdit_message_returnPressed()
     on_buttonSend_clicked();
 }
 
-void MainWindow::onAddContact()
-{
-    QDialog dialog(this);
-    dialog.setWindowTitle("Добавить контакт");
-    dialog.setModal(true);
-    dialog.setMinimumWidth(440);
-
-    QLineEdit *idEdit = new QLineEdit(&dialog);
-    idEdit->setPlaceholderText("username");
-    QLineEdit *nameEdit = new QLineEdit(&dialog);
-    nameEdit->setPlaceholderText("Заметка или отображаемое имя");
-
-    QLabel *hint = new QLabel("Введите имя пользователя собеседника. Заметка нужна только для вашего списка контактов.", &dialog);
-    hint->setObjectName("authSubtitle");
-    hint->setWordWrap(true);
-
-    QFormLayout *form = new QFormLayout;
-    form->setVerticalSpacing(12);
-    form->addRow("Имя", idEdit);
-    form->addRow("Заметка", nameEdit);
-
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText("Добавить");
-    buttons->button(QDialogButtonBox::Cancel)->setText("Отмена");
-
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(24, 22, 24, 20);
-    layout->setSpacing(14);
-    layout->addWidget(hint);
-    layout->addLayout(form);
-    layout->addWidget(buttons);
-
-    dialog.setStyleSheet(DesignTokens::authStyleSheet(QApplication::palette()) +
-                         "QDialogButtonBox QPushButton { min-width: 92px; }");
-
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    if (dialog.exec() != QDialog::Accepted)
-    {
-        return;
-    }
-
-    const QString contactId = idEdit->text().trimmed();
-    QString contactName = nameEdit->text().trimmed().left(48);
-
-    if (contactId.isEmpty())
-    {
-        ui->statusbar->showMessage("Введите имя пользователя контакта", 3000);
-        return;
-    }
-
-    if (!isValidAccountName(contactId))
-    {
-        ui->statusbar->showMessage("Имя контакта содержит недопустимые символы", 3000);
-        return;
-    }
-
-    if (contactId == m_currentUsername)
-    {
-        ui->statusbar->showMessage("Нельзя добавить себя в контакты", 3000);
-        return;
-    }
-
-    m_contacts.insert(contactId);
-    if (!contactName.isEmpty())
-        m_contactDisplayNames.insert(contactId, contactName);
-    saveConversations();
-    refreshChatList();
-
-    for (int i = 0; i < ui->listWidget_users->count(); ++i)
-    {
-        QListWidgetItem *item = ui->listWidget_users->item(i);
-        if (item->data(Qt::UserRole).toString() == contactId)
-        {
-            ui->listWidget_users->setCurrentItem(item);
-            onUserSelected();
-            break;
-        }
-    }
-}
-
 void MainWindow::onRemoveContact()
 {
     const QString peer = selectedPeer();
     if (peer.isEmpty())
     {
-        ui->statusbar->showMessage("Выберите контакт для удаления", 3000);
+        ui->statusbar->showMessage("Выберите диалог или пользователя", 3000);
         return;
     }
 
@@ -721,11 +633,11 @@ void MainWindow::onRemoveContact()
     saveConversations();
     refreshChatList();
     renderConversation(QString());
-    m_chatTitleLabel->setText("Выберите контакт");
-    m_chatStatusLabel->setText("Добавьте контакт, чтобы начать переписку");
+    m_chatTitleLabel->setText("Выберите собеседника");
+    m_chatStatusLabel->setText("Найдите пользователя, чтобы начать переписку");
     ui->lineEdit_message->setEnabled(false);
     ui->buttonSend->setEnabled(false);
-    ui->statusbar->showMessage("Контакт удален из списка", 3000);
+    ui->statusbar->showMessage("Диалог убран из списка", 3000);
 }
 
 void MainWindow::onProfile()
@@ -742,7 +654,7 @@ void MainWindow::onProfile()
 
     QLabel *title = new QLabel("Ваш профиль", &dialog);
     title->setObjectName("authTitle");
-    QLabel *hint = new QLabel("Имя пользователя используется для входа, добавления контактов и отображается собеседникам внутри зашифрованных сообщений.", &dialog);
+    QLabel *hint = new QLabel("Имя пользователя используется для входа, поиска собеседников и отображается внутри зашифрованных сообщений.", &dialog);
     hint->setObjectName("authSubtitle");
     hint->setWordWrap(true);
 
@@ -926,10 +838,6 @@ void MainWindow::onDisconnected()
     ui->lineEdit_message->setEnabled(false);
     ui->buttonSend->setEnabled(false);
     ui->buttonDisconnect->setEnabled(false);
-    if (m_addContactButton)
-    {
-        m_addContactButton->setEnabled(false);
-    }
     if (m_removeContactButton)
     {
         m_removeContactButton->setEnabled(false);
@@ -1064,7 +972,7 @@ void MainWindow::sendTextMessage(const QString &text)
     const QString peer = selectedPeer();
     if (peer.isEmpty())
     {
-        ui->statusbar->showMessage("Выберите контакт слева", 3000);
+        ui->statusbar->showMessage("Выберите собеседника слева", 3000);
         return;
     }
 
@@ -1148,10 +1056,6 @@ void MainWindow::handleMessageReceived(const Message &msg)
             ui->lineEdit_message->setEnabled(true);
             ui->buttonSend->setEnabled(!m_selectedPeer.isEmpty());
             ui->buttonDisconnect->setEnabled(true);
-            if (m_addContactButton)
-            {
-                m_addContactButton->setEnabled(true);
-            }
             if (m_removeContactButton)
             {
                 m_removeContactButton->setEnabled(!m_selectedPeer.isEmpty() && m_contacts.contains(m_selectedPeer));
@@ -1304,29 +1208,56 @@ void MainWindow::updateUserList(const QString &userList)
     }
 
     refreshChatList();
-    ui->statusbar->showMessage(QString("Контактов: %1").arg(m_contacts.size()), 3000);
+    ui->statusbar->showMessage(QString("Диалогов: %1").arg(m_contacts.size()), 3000);
 }
 
 void MainWindow::refreshChatList()
 {
     ui->listWidget_users->clear();
 
-    QStringList contactIds = m_contacts.values();
+    const QString searchText = m_contactSearchEdit ? m_contactSearchEdit->text().trimmed() : QString();
+    QSet<QString> visibleIds = m_contacts;
+    for (auto it = m_conversations.begin(); it != m_conversations.end(); ++it)
+        visibleIds.insert(it.key());
+
+    auto conversationMatches = [this, &searchText](const QString &contactId) {
+        if (searchText.isEmpty())
+            return true;
+
+        if (contactId.contains(searchText, Qt::CaseInsensitive) ||
+            contactDisplayName(contactId).contains(searchText, Qt::CaseInsensitive))
+            return true;
+
+        const QList<ChatLine> lines = m_conversations.value(contactId);
+        for (const ChatLine &line : lines)
+        {
+            if (line.message.contains(searchText, Qt::CaseInsensitive))
+                return true;
+        }
+        return false;
+    };
+
+    if (!searchText.isEmpty())
+    {
+        for (const QString &username : m_knownUsers)
+        {
+            if (username.contains(searchText, Qt::CaseInsensitive))
+                visibleIds.insert(username);
+        }
+    }
+
+    QStringList contactIds;
+    for (const QString &contactId : visibleIds)
+    {
+        if (contactId == m_currentUsername)
+            continue;
+        if (conversationMatches(contactId))
+            contactIds.append(contactId);
+    }
+
     std::sort(contactIds.begin(), contactIds.end(), [this](const QString &left, const QString &right) {
         return QString::compare(contactDisplayName(left), contactDisplayName(right), Qt::CaseInsensitive) < 0;
     });
-    const QString searchText = m_contactSearchEdit ? m_contactSearchEdit->text().trimmed() : QString();
-    if (!searchText.isEmpty())
-    {
-        QStringList filtered;
-        for (const QString &contactId : contactIds)
-        {
-            if (contactId.contains(searchText, Qt::CaseInsensitive) ||
-                contactDisplayName(contactId).contains(searchText, Qt::CaseInsensitive))
-                filtered.append(contactId);
-        }
-        contactIds = filtered;
-    }
 
     if (m_removeContactButton)
     {
@@ -1335,8 +1266,10 @@ void MainWindow::refreshChatList()
 
     if (contactIds.isEmpty())
     {
-        m_chatTitleLabel->setText(m_contacts.isEmpty() ? "Нет контактов" : "Ничего не найдено");
-        m_chatStatusLabel->setText(m_contacts.isEmpty() ? "Нажмите + слева, чтобы добавить собеседника" : "Измените поисковый запрос");
+        m_chatTitleLabel->setText(searchText.isEmpty() ? "Нет диалогов" : "Ничего не найдено");
+        m_chatStatusLabel->setText(searchText.isEmpty()
+                                       ? "Введите username в поиск, чтобы начать переписку"
+                                       : "Проверьте username или текст поиска");
         ui->lineEdit_message->setEnabled(false);
         ui->buttonSend->setEnabled(false);
         renderConversation(QString());
@@ -1351,8 +1284,9 @@ void MainWindow::refreshChatList()
         const QString displayName = contactDisplayName(contactId);
         const bool online = m_onlineUsers.contains(contactId);
         const QList<ChatLine> lines = m_conversations.value(contactId);
+        const bool knownOnly = !m_contacts.contains(contactId) && lines.isEmpty();
         const QString preview = lines.isEmpty()
-                                    ? QString("Нет сообщений")
+                                    ? (knownOnly ? QString("Найден пользователь") : QString("Нет сообщений"))
                                     : lines.last().message.left(42).replace('\n', ' ');
         QListWidgetItem *item = new QListWidgetItem(avatarIcon(displayName, online), displayName);
         item->setData(ChatListRoles::NameRole, displayName);
@@ -1363,7 +1297,7 @@ void MainWindow::refreshChatList()
         item->setData(ChatListRoles::StatusRole, lines.isEmpty() ? QString() : lines.last().status);
         item->setData(Qt::UserRole, contactId);
         item->setData(Qt::UserRole + 1, online);
-        item->setToolTip(QString("%1\nID: %2").arg(online ? "В сети" : "Не в сети", contactId));
+        item->setToolTip(QString("%1\nИмя: %2").arg(online ? "В сети" : "Не в сети", contactId));
         item->setSizeHint(QSize(0, 66));
         ui->listWidget_users->addItem(item);
 
@@ -1394,8 +1328,8 @@ void MainWindow::refreshChatList()
     {
         m_selectedPeer.clear();
         renderConversation(QString());
-        m_chatTitleLabel->setText("Выберите контакт");
-        m_chatStatusLabel->setText("Добавьте контакт, чтобы начать переписку");
+        m_chatTitleLabel->setText("Выберите собеседника");
+        m_chatStatusLabel->setText("Найдите пользователя, чтобы начать переписку");
         ui->lineEdit_message->setEnabled(false);
         ui->buttonSend->setEnabled(false);
     }
@@ -1568,7 +1502,7 @@ void MainWindow::renderConversation(const QString &peer)
     if (peer.isEmpty())
     {
         QListWidgetItem *item = new QListWidgetItem(m_messageList);
-        QLabel *hint = new QLabel("Выберите контакт слева", m_messageList);
+        QLabel *hint = new QLabel("Выберите собеседника слева", m_messageList);
         hint->setAlignment(Qt::AlignCenter);
         hint->setStyleSheet(DesignTokens::emptyStateStyle(QApplication::palette()));
         item->setSizeHint(QSize(0, 120));
