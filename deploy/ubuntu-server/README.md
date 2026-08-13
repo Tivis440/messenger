@@ -48,6 +48,35 @@ sudo sh deploy/ubuntu-server/reset-accounts.sh
 
 This truncates the PostgreSQL tables `offline_messages`, `prekey_bundles`, and `users`.
 
+## Optional pgAdmin panel
+
+For visual database inspection:
+
+```sh
+sudo sh deploy/ubuntu-server/install-pgadmin.sh
+```
+
+The panel is bound to `127.0.0.1:5050` on the server and is not exposed publicly. Open it through an SSH tunnel:
+
+```sh
+ssh -L 5050:127.0.0.1:5050 root@144.31.113.35
+```
+
+Then open `http://127.0.0.1:5050` locally.
+
+Default pgAdmin login:
+
+- email: `admin@messenger.local`
+- password file on server: `/var/lib/messenger/pgadmin_password`
+
+Add PostgreSQL server inside pgAdmin:
+
+- host: `127.0.0.1`
+- port: `5432`
+- database: `messenger`
+- username: `messenger`
+- password file on server: `/var/lib/messenger/postgres_password`
+
 ## Run manually
 
 ```sh
