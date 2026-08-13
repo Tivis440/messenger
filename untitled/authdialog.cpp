@@ -12,7 +12,6 @@
 #include <QSettings>
 #include <QSpinBox>
 #include <QTabWidget>
-#include <QUuid>
 #include <QVBoxLayout>
 
 AuthDialog::AuthDialog(QWidget *parent)
@@ -76,7 +75,7 @@ AuthDialog::AuthDialog(QWidget *parent)
     layout->addWidget(m_statusLabel);
 
     const QString savedName = settings.value("lastLoginName",
-                                             settings.value("publicId", settings.value("username"))).toString().trimmed();
+                                             settings.value("username")).toString().trimmed();
     m_loginNameEdit->setText(savedName);
 
     setStyleSheet(DesignTokens::authStyleSheet(QApplication::palette()));
@@ -103,11 +102,11 @@ QWidget *AuthDialog::createLoginPage()
     m_loginButton = new QPushButton("Войти", page);
     m_loginButton->setDefault(true);
 
-    m_loginNameEdit->setPlaceholderText("Например, @имя или nlk_...");
+    m_loginNameEdit->setPlaceholderText("Например, kirill или user.name");
     m_loginPasswordEdit->setPlaceholderText("Пароль");
     m_loginPasswordEdit->setEchoMode(QLineEdit::Password);
 
-    QLabel *hint = new QLabel("Введите @имя с этого устройства или публичный ID, созданный при регистрации.", page);
+    QLabel *hint = new QLabel("Введите имя пользователя и пароль. Сообщения останутся зашифрованными между клиентами.", page);
     hint->setObjectName("authSubtitle");
     hint->setWordWrap(true);
 
@@ -116,7 +115,7 @@ QWidget *AuthDialog::createLoginPage()
     form->setVerticalSpacing(12);
     form->setHorizontalSpacing(14);
     form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    form->addRow("ID или @имя", m_loginNameEdit);
+    form->addRow("Имя", m_loginNameEdit);
     form->addRow("Пароль", m_loginPasswordEdit);
 
     QVBoxLayout *layout = new QVBoxLayout(page);
@@ -144,17 +143,15 @@ QWidget *AuthDialog::createRegisterPage()
     m_registerButton = new QPushButton("Создать аккаунт", page);
     m_registerButton->setDefault(true);
 
-    m_registerNameEdit->setText(generatePublicId());
-    m_registerNameEdit->setReadOnly(true);
+    m_registerNameEdit->setPlaceholderText("Например, kirill или user.name");
     m_registerNameEdit->setMinimumWidth(340);
-    m_registerNameEdit->setCursorPosition(0);
-    m_registerNameEdit->setToolTip("Это ваш случайный публичный ID. Его можно передать контакту для добавления.");
+    m_registerNameEdit->setToolTip("Это имя будет использоваться для входа и добавления контактов.");
     m_registerPasswordEdit->setPlaceholderText("Пароль");
     m_registerPasswordConfirmEdit->setPlaceholderText("Повторите пароль");
     m_registerPasswordEdit->setEchoMode(QLineEdit::Password);
     m_registerPasswordConfirmEdit->setEchoMode(QLineEdit::Password);
 
-    QLabel *hint = new QLabel("Мы создадим случайный публичный ID. Его можно будет передать человеку, чтобы он добавил вас в контакты.", page);
+    QLabel *hint = new QLabel("Придумайте имя пользователя. Его смогут использовать другие люди, чтобы добавить вас в контакты.", page);
     hint->setObjectName("authSubtitle");
     hint->setWordWrap(true);
 
@@ -163,7 +160,7 @@ QWidget *AuthDialog::createRegisterPage()
     form->setVerticalSpacing(12);
     form->setHorizontalSpacing(14);
     form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    form->addRow("Публичный ID", m_registerNameEdit);
+    form->addRow("Имя", m_registerNameEdit);
     form->addRow("Пароль", m_registerPasswordEdit);
     form->addRow("Еще раз", m_registerPasswordConfirmEdit);
 
@@ -184,8 +181,7 @@ QWidget *AuthDialog::createRegisterPage()
 
 void AuthDialog::requestLogin()
 {
-    const QString loginName = m_loginNameEdit->text().trimmed();
-    const QString username = resolveLoginName(loginName);
+    const QString username = m_loginNameEdit->text().trimmed();
     const QString password = m_loginPasswordEdit->text();
 
     if (!validateCredentials(username, password))
@@ -198,7 +194,7 @@ void AuthDialog::requestLogin()
     const quint16 port = static_cast<quint16>(m_serverPortSpin->value());
     settings.setValue("server/host", host);
     settings.setValue("server/port", port);
-    settings.setValue("lastLoginName", loginName);
+    settings.setValue("lastLoginName", username);
 
     showInfo("Подключение к серверу...");
     emit loginRequested(username, password, host, port);
@@ -221,44 +217,21 @@ void AuthDialog::requestRegistration()
     settings.setValue("server/host", host);
     settings.setValue("server/port", port);
 
-    showInfo("Создаем анонимный ID...");
+    showInfo("Создаем аккаунт...");
     emit registerRequested(username, password, host, port);
-}
-
-QString AuthDialog::generatePublicId() const
-{
-    QString random = QUuid::createUuid().toString(QUuid::WithoutBraces).remove('-').left(20).toUpper();
-    return "nlk_" + random;
-}
-
-QString AuthDialog::resolveLoginName(const QString &input) const
-{
-    QString loginName = input.trimmed();
-    if (!loginName.startsWith('@'))
-        return loginName;
-
-    loginName = loginName.left(48);
-    const QString mappedId = QSettings().value("handleAliases/" + loginName.toLower()).toString().trimmed();
-    return mappedId.isEmpty() ? loginName : mappedId;
 }
 
 bool AuthDialog::validateCredentials(const QString &username, const QString &password, const QString &passwordConfirm)
 {
     if (username.isEmpty())
     {
-        showError("Введите публичный ID или сохраненное @имя.");
-        return false;
-    }
-
-    if (passwordConfirm.isNull() && username.startsWith('@'))
-    {
-        showError("Этот @ник еще не привязан к профилю на этом устройстве. Войдите по публичному ID.");
+        showError("Введите имя пользователя.");
         return false;
     }
 
     if (username.length() > 64)
     {
-        showError("Публичный ID слишком длинный.");
+        showError("Имя пользователя слишком длинное.");
         return false;
     }
 
@@ -267,15 +240,9 @@ bool AuthDialog::validateCredentials(const QString &username, const QString &pas
         const bool allowed = ch.isLetterOrNumber() || ch == '_' || ch == '-' || ch == '.';
         if (!allowed)
         {
-            showError("Публичный ID содержит недопустимые символы.");
+            showError("Имя пользователя содержит недопустимые символы.");
             return false;
         }
-    }
-
-    if (!passwordConfirm.isNull() && (!username.startsWith("nlk_") || username.length() != 24))
-    {
-        showError("Регистрация использует только автоматически созданный публичный ID.");
-        return false;
     }
 
     if (password.isEmpty())

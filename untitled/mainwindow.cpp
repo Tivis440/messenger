@@ -80,6 +80,21 @@ static QString endpointString(const QString &host, quint16 port)
     return host + ":" + QString::number(port);
 }
 
+static bool isValidAccountName(const QString &username)
+{
+    if (username.isEmpty() || username != username.trimmed() || username.size() > 64)
+        return false;
+
+    for (const QChar ch : username)
+    {
+        const bool allowed = ch.isLetterOrNumber() || ch == '_' || ch == '-' || ch == '.';
+        if (!allowed)
+            return false;
+    }
+
+    return true;
+}
+
 static QString certificateFingerprintHex(const QSslCertificate &certificate)
 {
     return QString::fromLatin1(certificate.digest(QCryptographicHash::Sha256).toHex().toUpper());
@@ -294,7 +309,7 @@ void MainWindow::setupUI()
 
     QLabel *brandLabel = new QLabel("Чаты", sidePanel);
     brandLabel->setObjectName("brandLabel");
-    m_profileButton = new QPushButton("@", sidePanel);
+    m_profileButton = new QPushButton("Профиль", sidePanel);
     m_profileButton->setObjectName("profileButton");
     m_profileButton->setToolTip("Профиль");
     m_profileButton->setAccessibleName("Профиль");
@@ -498,7 +513,7 @@ void MainWindow::startLogin(const QString &username, const QString &password, co
     {
         if (m_authDialog)
         {
-            m_authDialog->showError("Введите публичный ID и пароль.");
+            m_authDialog->showError("Введите имя пользователя и пароль.");
         }
         return;
     }
@@ -514,7 +529,6 @@ void MainWindow::startLogin(const QString &username, const QString &password, co
     m_signalManager.initialize(username);
 
     QSettings settings;
-    settings.setValue("publicId", username);
     settings.setValue("username", username);
 
     m_serverHost = host.trimmed().isEmpty() ? configuredServerHost() : host.trimmed();
@@ -534,7 +548,7 @@ void MainWindow::startRegistration(const QString &username, const QString &passw
     {
         if (m_authDialog)
         {
-            m_authDialog->showError("Введите публичный ID и пароль.");
+            m_authDialog->showError("Введите имя пользователя и пароль.");
         }
         return;
     }
@@ -550,7 +564,6 @@ void MainWindow::startRegistration(const QString &username, const QString &passw
     m_signalManager.initialize(username);
 
     QSettings settings;
-    settings.setValue("publicId", username);
     settings.setValue("username", username);
 
     m_serverHost = host.trimmed().isEmpty() ? configuredServerHost() : host.trimmed();
@@ -633,18 +646,18 @@ void MainWindow::onAddContact()
     dialog.setMinimumWidth(440);
 
     QLineEdit *idEdit = new QLineEdit(&dialog);
-    idEdit->setPlaceholderText("nlk_...");
+    idEdit->setPlaceholderText("username");
     QLineEdit *nameEdit = new QLineEdit(&dialog);
-    nameEdit->setPlaceholderText("@имя или заметка");
+    nameEdit->setPlaceholderText("Заметка или отображаемое имя");
 
-    QLabel *hint = new QLabel("Введите публичный ID собеседника. Ник нужен только для вашего списка контактов.", &dialog);
+    QLabel *hint = new QLabel("Введите имя пользователя собеседника. Заметка нужна только для вашего списка контактов.", &dialog);
     hint->setObjectName("authSubtitle");
     hint->setWordWrap(true);
 
     QFormLayout *form = new QFormLayout;
     form->setVerticalSpacing(12);
-    form->addRow("Публичный ID", idEdit);
-    form->addRow("@ник", nameEdit);
+    form->addRow("Имя", idEdit);
+    form->addRow("Заметка", nameEdit);
 
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     buttons->button(QDialogButtonBox::Ok)->setText("Добавить");
@@ -670,12 +683,16 @@ void MainWindow::onAddContact()
 
     const QString contactId = idEdit->text().trimmed();
     QString contactName = nameEdit->text().trimmed().left(48);
-    if (!contactName.isEmpty() && !contactName.startsWith('@'))
-        contactName.prepend('@');
 
     if (contactId.isEmpty())
     {
-        ui->statusbar->showMessage("Введите публичный ID контакта", 3000);
+        ui->statusbar->showMessage("Введите имя пользователя контакта", 3000);
+        return;
+    }
+
+    if (!isValidAccountName(contactId))
+    {
+        ui->statusbar->showMessage("Имя контакта содержит недопустимые символы", 3000);
         return;
     }
 
@@ -739,29 +756,23 @@ void MainWindow::onProfile()
 
     QLabel *title = new QLabel("Ваш профиль", &dialog);
     title->setObjectName("authTitle");
-    QLabel *hint = new QLabel("@имя можно использовать для входа на этом устройстве. При сообщениях оно передается собеседнику внутри зашифрованного текста.", &dialog);
+    QLabel *hint = new QLabel("Имя пользователя используется для входа, добавления контактов и отображается собеседникам внутри зашифрованных сообщений.", &dialog);
     hint->setObjectName("authSubtitle");
     hint->setWordWrap(true);
 
-    QLineEdit *handleEdit = new QLineEdit(&dialog);
-    handleEdit->setPlaceholderText("@имя");
-    handleEdit->setText(m_displayHandle);
+    QLineEdit *usernameEdit = new QLineEdit(m_currentUsername, &dialog);
+    usernameEdit->setReadOnly(true);
 
-    QLineEdit *idEdit = new QLineEdit(m_currentUsername, &dialog);
-    idEdit->setReadOnly(true);
-
-    QPushButton *copyIdButton = new QPushButton("Копировать ID", &dialog);
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Save)->setText("Сохранить");
-    buttons->button(QDialogButtonBox::Cancel)->setText("Отмена");
+    QPushButton *copyUsernameButton = new QPushButton("Копировать имя", &dialog);
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    buttons->button(QDialogButtonBox::Close)->setText("Закрыть");
 
     QFormLayout *form = new QFormLayout;
     form->setVerticalSpacing(12);
-    form->addRow("@имя", handleEdit);
-    form->addRow("Публичный ID", idEdit);
+    form->addRow("Имя", usernameEdit);
 
     QHBoxLayout *copyLayout = new QHBoxLayout;
-    copyLayout->addWidget(copyIdButton);
+    copyLayout->addWidget(copyUsernameButton);
     copyLayout->addStretch(1);
 
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
@@ -776,25 +787,12 @@ void MainWindow::onProfile()
     dialog.setStyleSheet(DesignTokens::authStyleSheet(QApplication::palette()) +
                          "QDialogButtonBox QPushButton { min-width: 92px; }");
 
-    connect(copyIdButton, &QPushButton::clicked, this, [this]() {
+    connect(copyUsernameButton, &QPushButton::clicked, this, [this]() {
         QApplication::clipboard()->setText(m_currentUsername);
-        ui->statusbar->showMessage("Публичный ID скопирован", 2500);
+        ui->statusbar->showMessage("Имя пользователя скопировано", 2500);
     });
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    if (dialog.exec() == QDialog::Accepted)
-    {
-        QString handle = handleEdit->text().trimmed();
-        if (!handle.isEmpty() && !handle.startsWith('@'))
-            handle.prepend('@');
-
-        m_displayHandle = handle.left(32);
-        saveProfile();
-        if (m_profileButton)
-            m_profileButton->setText(m_displayHandle.isEmpty() ? "@" : m_displayHandle);
-        ui->statusbar->showMessage("Профиль сохранен", 2500);
-    }
+    dialog.exec();
 }
 
 void MainWindow::onConnected()
@@ -953,7 +951,7 @@ void MainWindow::onDisconnected()
     if (m_profileButton)
     {
         m_profileButton->setEnabled(false);
-        m_profileButton->setText("@");
+        m_profileButton->setText("Профиль");
     }
 
     if (m_authDialog)
@@ -1099,7 +1097,7 @@ bool MainWindow::sendEncryptedTextMessage(const QString &peer, const QString &te
 {
     QString encryptedPayload;
     QString error;
-    const QString plainPayload = makeEncryptedMessagePlaintext(text, m_displayHandle);
+    const QString plainPayload = makeEncryptedMessagePlaintext(text, m_currentUsername);
     if (!m_signalManager.encrypt(peer, plainPayload, &encryptedPayload, &error))
     {
         ui->statusbar->showMessage(error, 4000);
@@ -1158,7 +1156,6 @@ void MainWindow::handleMessageReceived(const Message &msg)
         {
             m_authenticated = true;
             loadConversations();
-            loadProfile();
             refreshChatList();
             publishPreKeyBundle();
             logSystem("✓ Аутентификация успешна!");
@@ -1176,10 +1173,10 @@ void MainWindow::handleMessageReceived(const Message &msg)
             if (m_profileButton)
             {
                 m_profileButton->setEnabled(true);
-                m_profileButton->setText(m_displayHandle.isEmpty() ? "@" : m_displayHandle);
+                m_profileButton->setText(m_currentUsername);
             }
             ui->lineEdit_message->setFocus();
-            ui->statusbar->showMessage("Ваш публичный ID: " + m_currentUsername, 7000);
+            ui->statusbar->showMessage("Вы вошли как " + m_currentUsername, 7000);
             m_heartbeatTimer->start();
             if (m_authDialog)
             {
@@ -1797,25 +1794,6 @@ void MainWindow::saveConversations() const
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
     file.close();
     QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-}
-
-void MainWindow::loadProfile()
-{
-    QSettings settings;
-    m_displayHandle = settings.value("profile/" + m_currentUsername + "/handle").toString().trimmed();
-    if (!m_displayHandle.isEmpty() && !m_displayHandle.startsWith('@'))
-        m_displayHandle.prepend('@');
-}
-
-void MainWindow::saveProfile() const
-{
-    if (m_currentUsername.isEmpty())
-        return;
-
-    QSettings settings;
-    settings.setValue("profile/" + m_currentUsername + "/handle", m_displayHandle);
-    if (!m_displayHandle.isEmpty())
-        settings.setValue("handleAliases/" + m_displayHandle.toLower(), m_currentUsername);
 }
 
 QString MainWindow::contactDisplayName(const QString &contactId) const

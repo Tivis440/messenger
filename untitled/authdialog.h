@@ -32,8 +32,6 @@ protected:
     void changeEvent(QEvent *event) override;
 
 private:
-    QString generatePublicId() const;
-    QString resolveLoginName(const QString &input) const;
     bool validateCredentials(const QString &username, const QString &password, const QString &passwordConfirm = QString());
     QWidget *createLoginPage();
     QWidget *createRegisterPage();

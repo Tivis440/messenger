@@ -9,10 +9,9 @@
 - Legacy PBKDF2 and SHA-256 password records are migrated after successful login.
 - Login, registration, message, and prekey request rate limits are enforced in memory.
 - Offline messages are capped per recipient and expire after 30 days.
-- The server no longer broadcasts the complete registered-user list or online events.
-- New registrations use random public IDs instead of human-readable usernames.
-- Contact discovery is manual-ID based; the server is not used as a searchable people directory.
-- Runtime logs avoid message bodies, passwords, prekey payloads, and raw usernames.
+- New registrations use human-readable usernames.
+- Contacts are added by username.
+- Runtime logs avoid message bodies, passwords, and prekey payloads; usernames should be hashed or minimized in production logs where practical.
 - Local Signal state is encrypted with AES-256-GCM; on macOS the state key is stored in Keychain.
 - Peer identity fingerprints are exposed in the chat header as safety numbers.
 
@@ -34,10 +33,10 @@ The encrypted Signal state format is platform-neutral AES-256-GCM. Only the stat
 - Linux target: Secret Service/libsecret or KWallet.
 - Fallback target: user passphrase with Argon2id key derivation.
 
-## Contact Model
+## Account Model
 
-The server account identifier is a random public ID, for example `nlk_0123456789ABCDEF0123`.
-Display names and `@handle` values are local-only client metadata. A contact should be added
-through a manual public ID and an optional local `@handle` label.
+The server account identifier is a human-readable username, for example `alice` or `user.name`.
+A contact is added through that username.
 
-The server does not receive or index the `@handle`; it is only a local address-book label.
+The current concept no longer targets anonymity. The security focus is encrypted message content,
+mandatory TLS transport, local key protection, password hardening, and identity-key verification.

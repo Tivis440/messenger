@@ -289,20 +289,6 @@ static bool isValidUsername(const QString &username)
     return true;
 }
 
-static bool isGeneratedPublicId(const QString &publicId)
-{
-    if (!publicId.startsWith("nlk_") || publicId.size() != 24)
-        return false;
-
-    for (int i = 4; i < publicId.size(); ++i)
-    {
-        if (!publicId.at(i).isLetterOrNumber())
-            return false;
-    }
-
-    return true;
-}
-
 static QString auditSubject(const QString &value)
 {
     const QByteArray digest = QCryptographicHash::hash(value.toUtf8(), QCryptographicHash::Sha256).toHex();
@@ -467,7 +453,7 @@ bool Server::verifyPassword(const QString &username, const QString &password)
 
 bool Server::registerUser(const QString &username, const QString &password)
 {
-    if (!isGeneratedPublicId(username) || password.size() < PASSWORD_MIN_LENGTH)
+    if (!isValidUsername(username) || password.size() < PASSWORD_MIN_LENGTH)
         return false;
     if (m_userDb.contains(username))
         return false;

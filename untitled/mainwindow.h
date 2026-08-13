@@ -76,8 +76,6 @@ private:
     void refreshChatList();
     void loadConversations();
     void saveConversations() const;
-    void loadProfile();
-    void saveProfile() const;
     QString contactDisplayName(const QString &contactId) const;
     QString historyFilePath() const;
     QString selectedPeer() const;
@@ -114,7 +112,6 @@ private:
     QSet<QString> m_knownUsers;
     QSet<QString> m_contacts;
     QHash<QString, QString> m_contactDisplayNames;
-    QString m_displayHandle;
     SignalProtocolManager m_signalManager;
     QHash<QString, QStringList> m_pendingMessages;
     QHash<QString, QString> m_preKeyRequests;
