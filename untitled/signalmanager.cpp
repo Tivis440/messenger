@@ -899,24 +899,6 @@ bool SignalProtocolManager::decrypt(const QString &peer, const QString &wirePayl
     return true;
 }
 
-QString SignalProtocolManager::identityFingerprint(const QString &peer) const
-{
-    if (!m_store)
-        return QString();
-
-    const QByteArray identity = peer.isEmpty()
-                                    ? m_store->identityPublic
-                                    : m_store->identities.value(peer + ":1");
-    if (identity.isEmpty())
-        return QString();
-
-    const QByteArray digest = QCryptographicHash::hash(identity, QCryptographicHash::Sha256).toHex().toUpper();
-    QStringList groups;
-    for (int i = 0; i < digest.size() && i < 40; i += 4)
-        groups.append(QString::fromLatin1(digest.mid(i, 4)));
-    return groups.join(' ');
-}
-
 void SignalProtocolManager::removePublishedPreKey(quint32 id)
 {
     QJsonArray preKeys = m_localBundle.value("preKeys").toArray();

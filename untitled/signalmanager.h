@@ -22,7 +22,6 @@ public:
     bool processPreKeyBundle(const QString &peer, const QString &bundleJson);
     bool encrypt(const QString &peer, const QString &plainText, QString *wirePayload, QString *error);
     bool decrypt(const QString &peer, const QString &wirePayload, QString *plainText, QString *error);
-    QString identityFingerprint(const QString &peer) const;
     void removePublishedPreKey(quint32 id);
 
 private:

@@ -70,6 +70,11 @@ static QString endpointString(const QString &host, quint16 port)
     return host + ":" + QString::number(port);
 }
 
+static QString peerStatusText(bool online)
+{
+    return online ? "защищено / в сети" : "защищено / не в сети";
+}
+
 static bool isValidAccountName(const QString &username)
 {
     if (username.isEmpty() || username != username.trimmed() || username.size() > 64)
@@ -236,7 +241,6 @@ void MainWindow::setupUI()
     ui->label_online->setText("Чаты");
 
     ui->buttonSend->setEnabled(false);
-    ui->buttonDisconnect->setEnabled(false);
     ui->lineEdit_message->setEnabled(false);
     ui->buttonConnect->hide();
     ui->buttonRegister->hide();
@@ -245,8 +249,6 @@ void MainWindow::setupUI()
     ui->buttonSend->setText("Отправить");
     ui->buttonSend->setToolTip("Отправить сообщение");
     ui->buttonSend->setAccessibleName("Отправить сообщение");
-    ui->buttonDisconnect->setText("Отключиться");
-    ui->buttonDisconnect->setAccessibleName("Отключиться");
 
     QWidget *headerPanel = new QWidget(ui->centralwidget);
     headerPanel->setObjectName("chatHeader");
@@ -339,7 +341,6 @@ void MainWindow::setupUI()
     ui->label_server->setObjectName("serverLabel");
     ui->label_server->setContentsMargins(20, 0, 20, 0);
     sideLayout->addWidget(ui->label_server);
-    sideLayout->addWidget(ui->buttonDisconnect);
 
     m_splitter = new QSplitter(ui->centralwidget);
     m_splitter->addWidget(sidePanel);
@@ -589,10 +590,7 @@ void MainWindow::onUserSelected()
     }
     const bool online = item->data(Qt::UserRole + 1).toBool();
     m_chatTitleLabel->setText(contactDisplayName(m_selectedPeer));
-    const QString fingerprint = m_signalManager.identityFingerprint(m_selectedPeer);
-    m_chatStatusLabel->setText(fingerprint.isEmpty()
-                                   ? (online ? "ожидается ключ собеседника" : "не в сети / ожидается ключ")
-                                   : "контрольный код " + fingerprint);
+    m_chatStatusLabel->setText(peerStatusText(online));
     ui->lineEdit_message->setEnabled(m_authenticated);
     ui->buttonSend->setEnabled(m_authenticated);
     if (m_removeContactButton)
@@ -602,15 +600,6 @@ void MainWindow::onUserSelected()
     renderConversation(m_selectedPeer);
     sendReadStatuses(m_selectedPeer);
     ui->lineEdit_message->setFocus();
-}
-
-void MainWindow::on_buttonDisconnect_clicked()
-{
-    if (isConnected())
-    {
-        sendDisconnectMessage();
-        m_socket->close();
-    }
 }
 
 void MainWindow::on_lineEdit_message_returnPressed()
@@ -837,7 +826,6 @@ void MainWindow::onDisconnected()
 
     ui->lineEdit_message->setEnabled(false);
     ui->buttonSend->setEnabled(false);
-    ui->buttonDisconnect->setEnabled(false);
     if (m_removeContactButton)
     {
         m_removeContactButton->setEnabled(false);
@@ -902,7 +890,6 @@ void MainWindow::onError(QAbstractSocket::SocketError socketError)
 
     m_lastConnectionError = details;
     logError("Ошибка: " + details);
-    ui->buttonDisconnect->setEnabled(m_authenticated);
     if (m_authDialog)
     {
         m_authDialog->showError(m_lastConnectionError);
@@ -1055,7 +1042,6 @@ void MainWindow::handleMessageReceived(const Message &msg)
             logSystem("✓ Аутентификация успешна!");
             ui->lineEdit_message->setEnabled(true);
             ui->buttonSend->setEnabled(!m_selectedPeer.isEmpty());
-            ui->buttonDisconnect->setEnabled(true);
             if (m_removeContactButton)
             {
                 m_removeContactButton->setEnabled(!m_selectedPeer.isEmpty() && m_contacts.contains(m_selectedPeer));
@@ -1157,9 +1143,7 @@ void MainWindow::handleMessageReceived(const Message &msg)
 
         if (peer == m_selectedPeer)
         {
-            const QString fingerprint = m_signalManager.identityFingerprint(peer);
-            if (!fingerprint.isEmpty())
-                m_chatStatusLabel->setText("контрольный код " + fingerprint);
+            m_chatStatusLabel->setText(peerStatusText(m_onlineUsers.contains(peer)));
         }
 
         const QStringList pending = m_pendingMessages.take(peer);
@@ -1316,10 +1300,7 @@ void MainWindow::refreshChatList()
     else if (!m_selectedPeer.isEmpty() && selectedPeerExists)
     {
         m_chatTitleLabel->setText(contactDisplayName(m_selectedPeer));
-        const QString fingerprint = m_signalManager.identityFingerprint(m_selectedPeer);
-        m_chatStatusLabel->setText(fingerprint.isEmpty()
-                                       ? (selectedPeerOnline ? "ожидается ключ собеседника" : "не в сети / ожидается ключ")
-                                       : "контрольный код " + fingerprint);
+        m_chatStatusLabel->setText(peerStatusText(selectedPeerOnline));
         ui->lineEdit_message->setEnabled(m_authenticated);
         ui->buttonSend->setEnabled(m_authenticated);
         renderConversation(m_selectedPeer);

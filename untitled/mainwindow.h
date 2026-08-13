@@ -38,7 +38,6 @@ private slots:
     // UI слоты
     void on_buttonConnect_clicked();
     void on_buttonSend_clicked();
-    void on_buttonDisconnect_clicked();
     void on_lineEdit_message_returnPressed();
     void on_buttonRegister_clicked();
     void onUserSelected();

@@ -352,7 +352,6 @@ Data-dir сервера содержит:
 - SQLite/PostgreSQL вместо JSON storage.
 - Миграции схемы базы данных.
 - Более строгая offline queue: TTL jobs, per-user quotas, transactional delivery.
-- Полная модель safety number с явной ручной верификацией собеседника.
 - Предупреждение при смене identity key контакта.
 - Sealed Sender-like envelope.
 - Более приватный contact discovery.

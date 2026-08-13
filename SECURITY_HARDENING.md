@@ -13,7 +13,6 @@
 - Users and local dialogs are found through a unified username/dialog search.
 - Runtime logs avoid message bodies, passwords, and prekey payloads; usernames should be hashed or minimized in production logs where practical.
 - Local Signal state is encrypted with AES-256-GCM; on macOS the state key is stored in Keychain.
-- Peer identity fingerprints are exposed in the chat header as safety numbers.
 
 ## Release Checklist
 

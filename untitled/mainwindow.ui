@@ -102,19 +102,6 @@
      <string>Зарегистрироваться</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="buttonDisconnect">
-    <property name="geometry">
-     <rect>
-      <x>410</x>
-      <y>330</y>
-      <width>190</width>
-      <height>26</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Отключиться</string>
-    </property>
-   </widget>
    <widget class="QLineEdit" name="lineEdit_message">
     <property name="geometry">
      <rect>
