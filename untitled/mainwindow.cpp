@@ -127,10 +127,9 @@ static QString initialsForName(const QString &name)
     return initials.isEmpty() ? trimmed.left(1).toUpper() : initials;
 }
 
-static QIcon avatarIcon(const QString &name, bool online)
+static QIcon avatarIcon(const QString &name)
 {
     constexpr int size = 40;
-    const auto colors = DesignTokens::colors(QApplication::palette());
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
 
@@ -146,10 +145,6 @@ static QIcon avatarIcon(const QString &name, bool online)
     font.setPointSize(12);
     painter.setFont(font);
     painter.drawText(pixmap.rect(), Qt::AlignCenter, initialsForName(name));
-
-    painter.setBrush(online ? colors.onlineStatusColor : colors.labelTertiary);
-    painter.setPen(QPen(colors.backgroundElevated, 2));
-    painter.drawEllipse(size - 13, size - 13, 10, 10);
 
     return QIcon(pixmap);
 }
@@ -576,12 +571,16 @@ void MainWindow::onUserSelected()
     }
 
     m_selectedPeer = item->data(Qt::UserRole).toString();
+    const bool online = item->data(Qt::UserRole + 1).toBool();
     if (!m_contacts.contains(m_selectedPeer))
     {
         m_contacts.insert(m_selectedPeer);
         saveConversations();
     }
-    const bool online = item->data(Qt::UserRole + 1).toBool();
+    if (m_contactSearchEdit && !m_contactSearchEdit->text().isEmpty())
+    {
+        m_contactSearchEdit->clear();
+    }
     m_chatTitleLabel->setText(contactDisplayName(m_selectedPeer));
     m_chatStatusLabel->setText(peerStatusText(online));
     ui->lineEdit_message->setEnabled(m_authenticated);
@@ -1265,7 +1264,7 @@ void MainWindow::refreshChatList()
         const QString preview = lines.isEmpty()
                                     ? (knownOnly ? QString("Найден пользователь") : QString("Нет сообщений"))
                                     : lines.last().message.left(42).replace('\n', ' ');
-        QListWidgetItem *item = new QListWidgetItem(avatarIcon(displayName, online), displayName);
+        QListWidgetItem *item = new QListWidgetItem(avatarIcon(displayName), displayName);
         item->setData(ChatListRoles::NameRole, displayName);
         item->setData(ChatListRoles::PreviewRole, preview);
         item->setData(ChatListRoles::TimeRole, lines.isEmpty() ? QString() : lines.last().time);
