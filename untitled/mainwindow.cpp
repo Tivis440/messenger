@@ -232,6 +232,7 @@ void MainWindow::setupUI()
     ui->textEdit->setAcceptRichText(true);
     ui->listWidget_users->setSelectionMode(QAbstractItemView::SingleSelection);
     ui->listWidget_users->setItemDelegate(new ChatListDelegate(ui->listWidget_users));
+    ui->listWidget_users->setContextMenuPolicy(Qt::CustomContextMenu);
     ui->label_online->setText("Чаты");
 
     ui->buttonSend->setEnabled(false);
@@ -318,12 +319,6 @@ void MainWindow::setupUI()
     contactsHeaderLayout->setSpacing(8);
     ui->label_online->setContentsMargins(0, 0, 0, 0);
     contactsHeaderLayout->addWidget(ui->label_online, 1);
-    m_removeContactButton = new QPushButton("−", contactsHeader);
-    m_removeContactButton->setObjectName("contactToolButton");
-    m_removeContactButton->setToolTip("Убрать выбранный диалог из списка");
-    m_removeContactButton->setAccessibleName("Убрать выбранный диалог из списка");
-    m_removeContactButton->setEnabled(false);
-    contactsHeaderLayout->addWidget(m_removeContactButton);
     sideLayout->addWidget(contactsHeader);
     ui->listWidget_users->setIconSize(QSize(40, 40));
     ui->listWidget_users->setAccessibleName("Диалоги и пользователи");
@@ -368,7 +363,8 @@ void MainWindow::setupConnections()
     m_heartbeatTimer->setInterval(30000);
 
     connect(ui->listWidget_users, &QListWidget::itemClicked, this, &MainWindow::onUserSelected);
-    connect(m_removeContactButton, &QPushButton::clicked, this, &MainWindow::onRemoveContact);
+    connect(ui->listWidget_users, &QListWidget::customContextMenuRequested,
+            this, &MainWindow::onChatListContextMenuRequested);
     connect(m_profileButton, &QPushButton::clicked, this, &MainWindow::onProfile);
     connect(m_contactSearchEdit, &QLineEdit::textChanged, this, [this]() {
         refreshChatList();
@@ -420,8 +416,6 @@ void MainWindow::setupMenus()
     QAction *profileAction = conversationMenu->addAction("Мой профиль");
     profileAction->setShortcut(QKeySequence("Meta+,"));
     connect(profileAction, &QAction::triggered, this, &MainWindow::onProfile);
-    QAction *removeContactAction = conversationMenu->addAction("Убрать из списка");
-    connect(removeContactAction, &QAction::triggered, this, &MainWindow::onRemoveContact);
 
     QMenu *windowMenu = menuBar()->addMenu("Окно");
     QAction *minimizeAction = windowMenu->addAction("Свернуть");
@@ -582,10 +576,6 @@ void MainWindow::onUserSelected()
     m_chatStatusLabel->setText(peerStatusText(online));
     ui->lineEdit_message->setEnabled(m_authenticated);
     ui->buttonSend->setEnabled(m_authenticated);
-    if (m_removeContactButton)
-    {
-        m_removeContactButton->setEnabled(true);
-    }
     renderConversation(m_selectedPeer);
     sendReadStatuses(m_selectedPeer);
     ui->lineEdit_message->setFocus();
@@ -599,6 +589,34 @@ void MainWindow::on_lineEdit_message_returnPressed()
 void MainWindow::onRemoveContact()
 {
     const QString peer = selectedPeer();
+    removeConversation(peer);
+}
+
+void MainWindow::onChatListContextMenuRequested(const QPoint &pos)
+{
+    QListWidgetItem *item = ui->listWidget_users->itemAt(pos);
+    if (!item)
+    {
+        return;
+    }
+
+    const QString peer = item->data(Qt::UserRole).toString();
+    if (peer.isEmpty())
+    {
+        return;
+    }
+
+    QMenu menu(this);
+    QAction *deleteDialogAction = menu.addAction("Удалить диалог");
+    deleteDialogAction->setEnabled(m_contacts.contains(peer) || m_conversations.contains(peer));
+    connect(deleteDialogAction, &QAction::triggered, this, [this, peer]() {
+        removeConversation(peer);
+    });
+    menu.exec(ui->listWidget_users->viewport()->mapToGlobal(pos));
+}
+
+void MainWindow::removeConversation(const QString &peer)
+{
     if (peer.isEmpty())
     {
         ui->statusbar->showMessage("Выберите диалог или пользователя", 3000);
@@ -607,15 +625,30 @@ void MainWindow::onRemoveContact()
 
     m_contacts.remove(peer);
     m_contactDisplayNames.remove(peer);
-    m_selectedPeer.clear();
+    m_conversations.remove(peer);
+    const bool hadSearch = m_contactSearchEdit && !m_contactSearchEdit->text().isEmpty();
+    if (m_selectedPeer == peer)
+    {
+        m_selectedPeer.clear();
+    }
     saveConversations();
-    refreshChatList();
-    renderConversation(QString());
-    m_chatTitleLabel->setText("Выберите собеседника");
-    m_chatStatusLabel->setText("Найдите пользователя, чтобы начать переписку");
-    ui->lineEdit_message->setEnabled(false);
-    ui->buttonSend->setEnabled(false);
-    ui->statusbar->showMessage("Диалог убран из списка", 3000);
+    if (hadSearch)
+    {
+        m_contactSearchEdit->clear();
+    }
+    else
+    {
+        refreshChatList();
+    }
+    if (m_selectedPeer.isEmpty())
+    {
+        renderConversation(QString());
+        m_chatTitleLabel->setText("Выберите собеседника");
+        m_chatStatusLabel->setText("Найдите пользователя, чтобы начать переписку");
+        ui->lineEdit_message->setEnabled(false);
+        ui->buttonSend->setEnabled(false);
+    }
+    ui->statusbar->showMessage("Диалог удален", 3000);
 }
 
 void MainWindow::onProfile()
@@ -805,10 +838,6 @@ void MainWindow::onDisconnected()
 
     ui->lineEdit_message->setEnabled(false);
     ui->buttonSend->setEnabled(false);
-    if (m_removeContactButton)
-    {
-        m_removeContactButton->setEnabled(false);
-    }
     if (m_profileButton)
     {
         m_profileButton->setEnabled(false);
@@ -1021,10 +1050,6 @@ void MainWindow::handleMessageReceived(const Message &msg)
             logSystem("✓ Аутентификация успешна!");
             ui->lineEdit_message->setEnabled(true);
             ui->buttonSend->setEnabled(!m_selectedPeer.isEmpty());
-            if (m_removeContactButton)
-            {
-                m_removeContactButton->setEnabled(!m_selectedPeer.isEmpty() && m_contacts.contains(m_selectedPeer));
-            }
             if (m_profileButton)
             {
                 m_profileButton->setEnabled(true);
@@ -1221,11 +1246,6 @@ void MainWindow::refreshChatList()
     std::sort(contactIds.begin(), contactIds.end(), [this](const QString &left, const QString &right) {
         return QString::compare(contactDisplayName(left), contactDisplayName(right), Qt::CaseInsensitive) < 0;
     });
-
-    if (m_removeContactButton)
-    {
-        m_removeContactButton->setEnabled(!m_selectedPeer.isEmpty() && m_contacts.contains(m_selectedPeer));
-    }
 
     if (contactIds.isEmpty())
     {

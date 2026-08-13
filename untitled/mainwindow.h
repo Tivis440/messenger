@@ -5,6 +5,7 @@
 #include <QSslSocket>
 #include <QHash>
 #include <QList>
+#include <QPoint>
 #include <QSet>
 #include "signalmanager.h"
 #include "../protocol.h"
@@ -42,6 +43,7 @@ private slots:
     void on_buttonRegister_clicked();
     void onUserSelected();
     void onRemoveContact();
+    void onChatListContextMenuRequested(const QPoint &pos);
     void onProfile();
 
 protected:
@@ -72,6 +74,7 @@ private:
     bool sendEncryptedTextMessage(const QString &peer, const QString &text);
     void renderConversation(const QString &peer);
     void refreshChatList();
+    void removeConversation(const QString &peer);
     void loadConversations();
     void saveConversations() const;
     QString contactDisplayName(const QString &contactId) const;
@@ -117,7 +120,6 @@ private:
     class QLabel *m_chatStatusLabel = nullptr;
     class QListWidget *m_messageList = nullptr;
     class QLineEdit *m_contactSearchEdit = nullptr;
-    class QPushButton *m_removeContactButton = nullptr;
     class QPushButton *m_profileButton = nullptr;
     class QSplitter *m_splitter = nullptr;
     bool m_applyingTheme = false;
