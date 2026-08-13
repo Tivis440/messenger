@@ -62,18 +62,8 @@ static const QList<QByteArray> DEFAULT_PINNED_SERVER_CERT_SHA256 = {
     QByteArray::fromHex("903B6169F2D03CD85406D0A216CB38E46376AC8819201FEA5C531D16884E746D")
 };
 
-static QString configuredServerHost()
-{
-    const QString host = QSettings().value("server/host", "127.0.0.1").toString().trimmed();
-    return host.isEmpty() ? QStringLiteral("127.0.0.1") : host;
-}
-
-static quint16 configuredServerPort()
-{
-    bool ok = false;
-    const int port = QSettings().value("server/port", Protocol::DEFAULT_PORT).toInt(&ok);
-    return ok && port > 0 && port <= 65535 ? static_cast<quint16>(port) : Protocol::DEFAULT_PORT;
-}
+static const char *FIXED_SERVER_HOST = "144.31.113.35";
+static constexpr quint16 FIXED_SERVER_PORT = 5555;
 
 static QString endpointString(const QString &host, quint16 port)
 {
@@ -242,7 +232,7 @@ void MainWindow::setupUI()
     ui->textEdit->setAcceptRichText(true);
     ui->listWidget_users->setSelectionMode(QAbstractItemView::SingleSelection);
     ui->listWidget_users->setItemDelegate(new ChatListDelegate(ui->listWidget_users));
-    ui->label_server->setText(QString("ретранслятор %1:%2  /  TLS").arg(configuredServerHost()).arg(configuredServerPort()));
+    ui->label_server->setText(QString("ретранслятор %1:%2  /  TLS").arg(FIXED_SERVER_HOST).arg(FIXED_SERVER_PORT));
     ui->label_online->setText("Чаты");
 
     ui->buttonSend->setEnabled(false);
@@ -507,7 +497,7 @@ bool MainWindow::showAuthDialog()
     return accepted;
 }
 
-void MainWindow::startLogin(const QString &username, const QString &password, const QString &host, quint16 port)
+void MainWindow::startLogin(const QString &username, const QString &password)
 {
     if (username.isEmpty() || password.isEmpty())
     {
@@ -531,10 +521,8 @@ void MainWindow::startLogin(const QString &username, const QString &password, co
     QSettings settings;
     settings.setValue("username", username);
 
-    m_serverHost = host.trimmed().isEmpty() ? configuredServerHost() : host.trimmed();
-    m_serverPort = port > 0 ? port : configuredServerPort();
-    settings.setValue("server/host", m_serverHost);
-    settings.setValue("server/port", m_serverPort);
+    m_serverHost = QString::fromLatin1(FIXED_SERVER_HOST);
+    m_serverPort = FIXED_SERVER_PORT;
     m_socket->setSslConfiguration(tofuTlsConfiguration(m_socket));
 
     logSystem("Защищенное подключение к " + endpointString(m_serverHost, m_serverPort) + "...");
@@ -542,7 +530,7 @@ void MainWindow::startLogin(const QString &username, const QString &password, co
     m_socket->connectToHostEncrypted(m_serverHost, m_serverPort);
 }
 
-void MainWindow::startRegistration(const QString &username, const QString &password, const QString &host, quint16 port)
+void MainWindow::startRegistration(const QString &username, const QString &password)
 {
     if (username.isEmpty() || password.isEmpty())
     {
@@ -566,10 +554,8 @@ void MainWindow::startRegistration(const QString &username, const QString &passw
     QSettings settings;
     settings.setValue("username", username);
 
-    m_serverHost = host.trimmed().isEmpty() ? configuredServerHost() : host.trimmed();
-    m_serverPort = port > 0 ? port : configuredServerPort();
-    settings.setValue("server/host", m_serverHost);
-    settings.setValue("server/port", m_serverPort);
+    m_serverHost = QString::fromLatin1(FIXED_SERVER_HOST);
+    m_serverPort = FIXED_SERVER_PORT;
     m_socket->setSslConfiguration(tofuTlsConfiguration(m_socket));
 
     logSystem("Защищенное подключение к " + endpointString(m_serverHost, m_serverPort) + " для регистрации...");
@@ -831,8 +817,8 @@ void MainWindow::onSslErrors(const QList<QSslError> &errors)
 
 QString MainWindow::serverPinSettingsKey() const
 {
-    const QString host = m_serverHost.trimmed().isEmpty() ? configuredServerHost() : m_serverHost.trimmed();
-    const quint16 port = m_serverPort > 0 ? m_serverPort : configuredServerPort();
+    const QString host = m_serverHost.trimmed().isEmpty() ? QString::fromLatin1(FIXED_SERVER_HOST) : m_serverHost.trimmed();
+    const quint16 port = m_serverPort > 0 ? m_serverPort : FIXED_SERVER_PORT;
     const QString endpoint = endpointString(host.toLower(), port);
     const QString endpointHash = QString::fromLatin1(QCryptographicHash::hash(endpoint.toUtf8(), QCryptographicHash::Sha256).toHex());
     return "serverPins/" + endpointHash;
@@ -994,8 +980,8 @@ void MainWindow::onReadyRead()
 
 void MainWindow::onError(QAbstractSocket::SocketError socketError)
 {
-    const QString host = m_serverHost.trimmed().isEmpty() ? configuredServerHost() : m_serverHost.trimmed();
-    const quint16 port = m_serverPort > 0 ? m_serverPort : configuredServerPort();
+    const QString host = m_serverHost.trimmed().isEmpty() ? QString::fromLatin1(FIXED_SERVER_HOST) : m_serverHost.trimmed();
+    const quint16 port = m_serverPort > 0 ? m_serverPort : FIXED_SERVER_PORT;
     const QString endpoint = endpointString(host, port);
     QString details = QString("Не удалось подключиться к %1: %2 (код %3)")
                           .arg(endpoint, m_socket->errorString())

@@ -50,8 +50,8 @@ protected:
     void changeEvent(QEvent *event) override;
 
 private:
-    void startLogin(const QString &username, const QString &password, const QString &host = QString(), quint16 port = 0);
-    void startRegistration(const QString &username, const QString &password, const QString &host = QString(), quint16 port = 0);
+    void startLogin(const QString &username, const QString &password);
+    void startRegistration(const QString &username, const QString &password);
     void setupConnections();
     void setupUI();
     void setupMenus();

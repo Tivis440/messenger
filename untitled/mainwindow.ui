@@ -60,7 +60,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>Сервер: 127.0.0.1:5555</string>
+     <string>Сервер: 144.31.113.35:5555</string>
     </property>
     <property name="wordWrap">
      <bool>true</bool>

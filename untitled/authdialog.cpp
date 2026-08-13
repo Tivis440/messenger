@@ -5,12 +5,10 @@
 #include <QApplication>
 #include <QEvent>
 #include <QFormLayout>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSettings>
-#include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
@@ -23,8 +21,6 @@ AuthDialog::AuthDialog(QWidget *parent)
       m_registerNameEdit(nullptr),
       m_registerPasswordEdit(nullptr),
       m_registerPasswordConfirmEdit(nullptr),
-      m_serverHostEdit(new QLineEdit(this)),
-      m_serverPortSpin(new QSpinBox(this)),
       m_loginButton(nullptr),
       m_registerButton(nullptr)
 {
@@ -41,23 +37,6 @@ AuthDialog::AuthDialog(QWidget *parent)
     subtitle->setWordWrap(true);
     title->setAlignment(Qt::AlignCenter);
 
-    QSettings settings;
-    m_serverHostEdit->setPlaceholderText("127.0.0.1");
-    m_serverHostEdit->setText(settings.value("server/host", "127.0.0.1").toString());
-    m_serverHostEdit->setAccessibleName("Адрес сервера");
-    m_serverPortSpin->setRange(1, 65535);
-    m_serverPortSpin->setValue(settings.value("server/port", Protocol::DEFAULT_PORT).toInt());
-    m_serverPortSpin->setAccessibleName("Порт сервера");
-    m_serverPortSpin->setMinimumWidth(140);
-
-    QFormLayout *serverForm = new QFormLayout;
-    serverForm->setContentsMargins(0, 0, 0, 0);
-    serverForm->setVerticalSpacing(10);
-    serverForm->setHorizontalSpacing(14);
-    serverForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    serverForm->addRow("Сервер", m_serverHostEdit);
-    serverForm->addRow("Порт", m_serverPortSpin);
-
     m_tabs->addTab(createLoginPage(), "Вход");
     m_tabs->addTab(createRegisterPage(), "Регистрация");
 
@@ -70,10 +49,10 @@ AuthDialog::AuthDialog(QWidget *parent)
     layout->setSpacing(14);
     layout->addWidget(title);
     layout->addWidget(subtitle);
-    layout->addLayout(serverForm);
     layout->addWidget(m_tabs);
     layout->addWidget(m_statusLabel);
 
+    QSettings settings;
     const QString savedName = settings.value("lastLoginName",
                                              settings.value("username")).toString().trimmed();
     m_loginNameEdit->setText(savedName);
@@ -190,14 +169,10 @@ void AuthDialog::requestLogin()
     }
 
     QSettings settings;
-    const QString host = m_serverHostEdit->text().trimmed().isEmpty() ? "127.0.0.1" : m_serverHostEdit->text().trimmed();
-    const quint16 port = static_cast<quint16>(m_serverPortSpin->value());
-    settings.setValue("server/host", host);
-    settings.setValue("server/port", port);
     settings.setValue("lastLoginName", username);
 
     showInfo("Подключение к серверу...");
-    emit loginRequested(username, password, host, port);
+    emit loginRequested(username, password);
 }
 
 void AuthDialog::requestRegistration()
@@ -211,14 +186,8 @@ void AuthDialog::requestRegistration()
         return;
     }
 
-    QSettings settings;
-    const QString host = m_serverHostEdit->text().trimmed().isEmpty() ? "127.0.0.1" : m_serverHostEdit->text().trimmed();
-    const quint16 port = static_cast<quint16>(m_serverPortSpin->value());
-    settings.setValue("server/host", host);
-    settings.setValue("server/port", port);
-
     showInfo("Создаем аккаунт...");
-    emit registerRequested(username, password, host, port);
+    emit registerRequested(username, password);
 }
 
 bool AuthDialog::validateCredentials(const QString &username, const QString &password, const QString &passwordConfirm)

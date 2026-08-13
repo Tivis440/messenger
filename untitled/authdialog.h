@@ -6,7 +6,6 @@
 class QLabel;
 class QLineEdit;
 class QPushButton;
-class QSpinBox;
 class QTabWidget;
 
 class AuthDialog : public QDialog
@@ -21,8 +20,8 @@ public:
     void showInfo(const QString &message);
 
 signals:
-    void loginRequested(const QString &username, const QString &password, const QString &host, quint16 port);
-    void registerRequested(const QString &username, const QString &password, const QString &host, quint16 port);
+    void loginRequested(const QString &username, const QString &password);
+    void registerRequested(const QString &username, const QString &password);
 
 private slots:
     void requestLogin();
@@ -43,8 +42,6 @@ private:
     QLineEdit *m_registerNameEdit;
     QLineEdit *m_registerPasswordEdit;
     QLineEdit *m_registerPasswordConfirmEdit;
-    QLineEdit *m_serverHostEdit;
-    QSpinBox *m_serverPortSpin;
     QPushButton *m_loginButton;
     QPushButton *m_registerButton;
     bool m_applyingTheme = false;

@@ -36,6 +36,6 @@ set OPENSSL_DIR=C:\libs\OpenSSL-Win64
 deploy\windows-client\build.bat
 ```
 
-In the login window, enter the Ubuntu server IP or DNS name and port `5555`.
+The client is pinned to `144.31.113.35:5555`. The login window asks only for username and password.
 
 Note: Windows secure local-key storage still needs a DPAPI/Credential Manager backend. Until that is added, Windows builds should be treated as test builds, not high-security builds.
