@@ -50,22 +50,6 @@
      <string>Онлайн пользователи</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label_server">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>300</y>
-      <width>390</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Сервер: 144.31.113.35:5555</string>
-    </property>
-    <property name="wordWrap">
-     <bool>true</bool>
-    </property>
-   </widget>
    <widget class="QLineEdit" name="lineEdit_username">
     <property name="geometry">
      <rect>

@@ -83,7 +83,7 @@ QString DesignTokens::appStyleSheet(const QPalette &palette)
                "QSplitter::handle { background: %4; width: 1px; }"
                "QLabel#brandLabel { color: %2; font-size: 16px; font-weight: 700; }"
                "QLabel#chatTitle { color: %2; font-size: 17px; font-weight: 700; }"
-               "QLabel#chatStatus, QLabel#serverLabel { color: %7; font-size: 12px; font-weight: 500; }"
+               "QLabel#chatStatus { color: %7; font-size: 12px; font-weight: 500; }"
                "QLabel#securityBadge {"
                "  background: transparent;"
                "  color: %7;"

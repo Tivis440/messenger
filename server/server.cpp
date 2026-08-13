@@ -830,6 +830,7 @@ void Server::onClientAuthenticated(const QString &username, ClientSession *sessi
 {
     m_clients.insert(username, session);
     deliverOfflineMessages(username, session);
+    broadcastUserList();
 
     qInfo() << "client_online count=" << m_clients.size() << "subject=" << auditSubject(username);
 }
@@ -842,6 +843,7 @@ void Server::onClientDisconnected(const QString &username, ClientSession *sessio
     if (wasOnline)
     {
         m_clients.remove(username);
+        broadcastUserList();
     }
 
     session->deleteLater();

@@ -237,7 +237,6 @@ void MainWindow::setupUI()
     ui->textEdit->setAcceptRichText(true);
     ui->listWidget_users->setSelectionMode(QAbstractItemView::SingleSelection);
     ui->listWidget_users->setItemDelegate(new ChatListDelegate(ui->listWidget_users));
-    ui->label_server->setText(QString("ретранслятор %1:%2  /  TLS").arg(FIXED_SERVER_HOST).arg(FIXED_SERVER_PORT));
     ui->label_online->setText("Чаты");
 
     ui->buttonSend->setEnabled(false);
@@ -338,10 +337,6 @@ void MainWindow::setupUI()
     ui->listWidget_users->setAccessibleName("Диалоги и пользователи");
     ui->listWidget_users->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     sideLayout->addWidget(ui->listWidget_users, 1);
-    ui->label_server->setObjectName("serverLabel");
-    ui->label_server->setContentsMargins(20, 0, 20, 0);
-    sideLayout->addWidget(ui->label_server);
-
     m_splitter = new QSplitter(ui->centralwidget);
     m_splitter->addWidget(sidePanel);
     m_splitter->addWidget(chatPanel);
@@ -516,7 +511,6 @@ void MainWindow::startLogin(const QString &username, const QString &password)
     m_socket->setSslConfiguration(tofuTlsConfiguration(m_socket));
 
     logSystem("Защищенное подключение к " + endpointString(m_serverHost, m_serverPort) + "...");
-    ui->label_server->setText(QString("ретранслятор %1:%2  /  TLS").arg(m_serverHost).arg(m_serverPort));
     m_socket->connectToHostEncrypted(m_serverHost, m_serverPort);
 }
 
@@ -549,7 +543,6 @@ void MainWindow::startRegistration(const QString &username, const QString &passw
     m_socket->setSslConfiguration(tofuTlsConfiguration(m_socket));
 
     logSystem("Защищенное подключение к " + endpointString(m_serverHost, m_serverPort) + " для регистрации...");
-    ui->label_server->setText(QString("ретранслятор %1:%2  /  TLS").arg(m_serverHost).arg(m_serverPort));
     m_socket->connectToHostEncrypted(m_serverHost, m_serverPort);
 }
 
