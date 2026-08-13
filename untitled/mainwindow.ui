@@ -14,19 +14,6 @@
    <string>Мессенджер</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QTextEdit" name="textEdit">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>10</y>
-      <width>390</width>
-      <height>280</height>
-     </rect>
-    </property>
-    <property name="readOnly">
-     <bool>true</bool>
-    </property>
-   </widget>
    <widget class="QListWidget" name="listWidget_users">
     <property name="geometry">
      <rect>
@@ -48,42 +35,6 @@
     </property>
     <property name="text">
      <string>Онлайн пользователи</string>
-    </property>
-   </widget>
-   <widget class="QLineEdit" name="lineEdit_username">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>330</y>
-      <width>260</width>
-      <height>26</height>
-     </rect>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="buttonConnect">
-    <property name="geometry">
-     <rect>
-      <x>280</x>
-      <y>330</y>
-      <width>120</width>
-      <height>26</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Подключиться</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="buttonRegister">
-    <property name="geometry">
-     <rect>
-      <x>280</x>
-      <y>360</y>
-      <width>120</width>
-      <height>26</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Зарегистрироваться</string>
     </property>
    </widget>
    <widget class="QLineEdit" name="lineEdit_message">

@@ -11,8 +11,7 @@ namespace ChatListRoles
         PreviewRole,
         TimeRole,
         OnlineRole,
-        UnreadRole,
-        StatusRole
+        UnreadRole
     };
 }
 

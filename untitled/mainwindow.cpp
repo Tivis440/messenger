@@ -16,14 +16,11 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QSettings>
-#include <QHostInfo>
 #include <QAbstractItemView>
 #include <QApplication>
-#include <QClipboard>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QEvent>
-#include <QInputDialog>
 #include <QLineEdit>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -33,13 +30,11 @@
 #include <QListWidgetItem>
 #include <QPainter>
 #include <QPushButton>
-#include <QShortcut>
 #include <QSplitter>
 #include <QSslCertificate>
 #include <QSslConfiguration>
 #include <QSslError>
 #include <QStandardPaths>
-#include <QTextEdit>
 #include <QUrl>
 #include <QUuid>
 #include <QVBoxLayout>
@@ -73,21 +68,6 @@ static QString endpointString(const QString &host, quint16 port)
 static QString peerStatusText(bool online)
 {
     return online ? "в сети" : "не в сети";
-}
-
-static bool isValidAccountName(const QString &username)
-{
-    if (username.isEmpty() || username != username.trimmed() || username.size() > 64)
-        return false;
-
-    for (const QChar ch : username)
-    {
-        const bool allowed = ch.isLetterOrNumber() || ch == '_' || ch == '-' || ch == '.';
-        if (!allowed)
-            return false;
-    }
-
-    return true;
 }
 
 static QString certificateFingerprintHex(const QSslCertificate &certificate)
@@ -228,8 +208,6 @@ void MainWindow::setupUI()
     ui->lineEdit_message->setPlaceholderText("Сообщение...");
     ui->lineEdit_message->setAccessibleName("Поле ввода сообщения");
     ui->lineEdit_message->setAccessibleDescription("Введите сообщение выбранному собеседнику");
-    ui->textEdit->setReadOnly(true);
-    ui->textEdit->setAcceptRichText(true);
     ui->listWidget_users->setSelectionMode(QAbstractItemView::SingleSelection);
     ui->listWidget_users->setItemDelegate(new ChatListDelegate(ui->listWidget_users));
     ui->listWidget_users->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -237,9 +215,6 @@ void MainWindow::setupUI()
 
     ui->buttonSend->setEnabled(false);
     ui->lineEdit_message->setEnabled(false);
-    ui->buttonConnect->hide();
-    ui->buttonRegister->hide();
-    ui->lineEdit_username->hide();
     ui->buttonSend->setObjectName("buttonSend");
     ui->buttonSend->setText("Отправить");
     ui->buttonSend->setToolTip("Отправить сообщение");
@@ -266,7 +241,6 @@ void MainWindow::setupUI()
     chatLayout->setContentsMargins(0, 0, 0, 0);
     chatLayout->setSpacing(0);
     chatLayout->addWidget(headerPanel);
-    ui->textEdit->hide();
     m_messageList = new QListWidget(chatPanel);
     m_messageList->setObjectName("messageList");
     m_messageList->setAccessibleName("История сообщений");
@@ -384,24 +358,18 @@ void MainWindow::setupMenus()
     connect(copyAction, &QAction::triggered, this, []() {
         if (auto *lineEdit = qobject_cast<QLineEdit *>(QApplication::focusWidget()))
             lineEdit->copy();
-        else if (auto *textEdit = qobject_cast<QTextEdit *>(QApplication::focusWidget()))
-            textEdit->copy();
     });
     QAction *pasteAction = editMenu->addAction("Вставить");
     pasteAction->setShortcut(QKeySequence::Paste);
     connect(pasteAction, &QAction::triggered, this, []() {
         if (auto *lineEdit = qobject_cast<QLineEdit *>(QApplication::focusWidget()))
             lineEdit->paste();
-        else if (auto *textEdit = qobject_cast<QTextEdit *>(QApplication::focusWidget()))
-            textEdit->paste();
     });
     QAction *selectAllAction = editMenu->addAction("Выбрать все");
     selectAllAction->setShortcut(QKeySequence::SelectAll);
     connect(selectAllAction, &QAction::triggered, this, []() {
         if (auto *lineEdit = qobject_cast<QLineEdit *>(QApplication::focusWidget()))
             lineEdit->selectAll();
-        else if (auto *textEdit = qobject_cast<QTextEdit *>(QApplication::focusWidget()))
-            textEdit->selectAll();
     });
 
     QMenu *viewMenu = menuBar()->addMenu("Вид");
@@ -532,11 +500,6 @@ void MainWindow::startRegistration(const QString &username, const QString &passw
     m_socket->connectToHostEncrypted(m_serverHost, m_serverPort);
 }
 
-void MainWindow::on_buttonConnect_clicked()
-{
-    startLogin(ui->lineEdit_username->text().trimmed(), QString());
-}
-
 void MainWindow::on_buttonSend_clicked()
 {
     QString message = ui->lineEdit_message->text().trimmed();
@@ -546,11 +509,6 @@ void MainWindow::on_buttonSend_clicked()
         ui->lineEdit_message->clear();
         ui->lineEdit_message->setFocus();
     }
-}
-
-void MainWindow::on_buttonRegister_clicked()
-{
-    startRegistration(ui->lineEdit_username->text().trimmed(), QString());
 }
 
 void MainWindow::onUserSelected()
@@ -584,12 +542,6 @@ void MainWindow::onUserSelected()
 void MainWindow::on_lineEdit_message_returnPressed()
 {
     on_buttonSend_clicked();
-}
-
-void MainWindow::onRemoveContact()
-{
-    const QString peer = selectedPeer();
-    removeConversation(peer);
 }
 
 void MainWindow::onChatListContextMenuRequested(const QPoint &pos)
@@ -1277,7 +1229,6 @@ void MainWindow::refreshChatList()
         item->setData(ChatListRoles::TimeRole, lines.isEmpty() ? QString() : lines.last().time);
         item->setData(ChatListRoles::OnlineRole, online);
         item->setData(ChatListRoles::UnreadRole, 0);
-        item->setData(ChatListRoles::StatusRole, lines.isEmpty() ? QString() : lines.last().status);
         item->setData(Qt::UserRole, contactId);
         item->setData(Qt::UserRole + 1, online);
         item->setToolTip(QString("%1\nИмя: %2").arg(online ? "В сети" : "Не в сети", contactId));
@@ -1719,31 +1670,21 @@ QString MainWindow::selectedPeer() const
     return m_selectedPeer;
 }
 
-void MainWindow::log(const QString &message, const QString &sender)
+void MainWindow::log(const QString &message)
 {
-    QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss");
-    QString logEntry;
-
-    if (sender.isEmpty() || sender == "SERVER")
-    {
-        logEntry = QString("[%1] %2").arg(timestamp, message);
-    }
-    else
-    {
-        logEntry = QString("[%1] %2: %3").arg(timestamp, sender, message);
-    }
-
-    ui->textEdit->append(logEntry);
+    const QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss");
+    const QString logEntry = QString("[%1] %2").arg(timestamp, message);
+    qInfo().noquote() << logEntry;
 }
 
 void MainWindow::logSystem(const QString &message)
 {
-    log(">>> " + message);
+    log(message);
 }
 
 void MainWindow::logError(const QString &message)
 {
-    log("❌ " + message);
+    qWarning().noquote() << message;
 }
 
 bool MainWindow::isConnected() const
