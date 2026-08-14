@@ -60,7 +60,7 @@
 | Desktop UI | Qt Widgets, C++17 | Нативное приложение для macOS и Windows без браузерной оболочки |
 | Сеть | `QSslSocket`, `QTcpServer`, `QDataStream` | Бинарный протокол поверх обязательного TLS |
 | TLS | Qt SSL backend, OpenSSL-compatible runtime | Защищенный транспорт и pinning сертификата |
-| Пароли | Argon2id, legacy migration | Более устойчивое хранение новых password records |
+| Пароли | Argon2id | Более устойчивое хранение password records |
 | E2EE-слой | `libsignal-protocol-c` | Double Ratchet/prekey primitives для защищенных диалогов |
 | Локальные ключи | AES-256-GCM, macOS Keychain, Windows DPAPI | Приватные состояния не лежат на диске открытым текстом |
 | Сервер | Qt Core/Network, C++17, libargon2 | Минимальный relay-сервер без GUI |
@@ -344,7 +344,7 @@ Data-dir сервера содержит:
 └── tls_server.sha256
 ```
 
-Пользователи, prekey bundles и offline queue хранятся в PostgreSQL. Старые JSON-файлы из data-dir импортируются один раз при первом запуске после миграции.
+Пользователи, prekey bundles и offline queue хранятся в PostgreSQL. Data-dir используется для TLS-файлов и локальных секретов сервиса.
 
 `tls_server.key` и `postgres_password` должны быть доступны только системному пользователю сервиса.
 

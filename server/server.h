@@ -102,9 +102,6 @@ private:
     void broadcastUserList();
     bool openDatabase();
     bool migrateDatabase();
-    void migrateLegacyJsonFiles();
-    bool legacyJsonHasBeenImported() const;
-    void markLegacyJsonImported();
     QJsonObject passwordEntryForUser(const QString &username) const;
     bool savePasswordEntry(const QString &username, const QJsonObject &entry);
     QStringList registeredUsers() const;
@@ -118,9 +115,6 @@ private:
     QHash<QString, ServerRateWindow> m_preKeyRate;
     ServerRateWindow m_registrationRate;
     QString m_dataDir;
-    QString m_usersFile;
-    QString m_offlineMessagesFile;
-    QString m_preKeyBundlesFile;
     QString m_certificateFile;
     QString m_privateKeyFile;
     bool m_storageReady = false;

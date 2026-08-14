@@ -45,8 +45,6 @@ MESSENGER_SERVER_DATA_DIR=/path/to/server-data server
 export MESSENGER_DATABASE_URL=postgres://messenger:password@127.0.0.1:5432/messenger
 ```
 
-Старые `users.json`, `prekey_bundles.json` и `offline_messages.json` из data-dir импортируются один раз, если они существуют.
-
 ## Адрес сервера в клиенте
 
 Клиент фиксированно подключается к `144.31.113.35:5555`.

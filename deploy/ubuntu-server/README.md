@@ -13,7 +13,7 @@ sudo sh deploy/ubuntu-server/install.sh
 The script installs PostgreSQL, creates the `messenger` database/user, builds the Qt server, creates the data directory for TLS files, generates a development TLS certificate if one is missing, installs `messenger.service`, and starts it.
 At the end it prints the certificate SHA-256 fingerprint and writes it to `/var/lib/messenger/tls_server.sha256`.
 The client uses trust on first use: on the first connection it stores the server certificate fingerprint automatically, then blocks unexpected certificate changes.
-Server data is stored in PostgreSQL. The old JSON files are used only for one-time import if they already exist in the data directory.
+Server data is stored in PostgreSQL. The data directory is used for TLS files and local service secrets.
 
 Default paths:
 

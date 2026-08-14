@@ -3,7 +3,6 @@
 #include <QDateTime>
 #include <QCoreApplication>
 #include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QCryptographicHash>
@@ -115,20 +114,7 @@ ClientSession::ClientSession(qintptr socketDescriptor,
     qDebug() << "Новое TLS подключение:" << socketDescriptor;
 }
 
-// ---------------- User DB helpers (Server) ----------------
-
-static Message messageFromJson(const QJsonObject &object)
-{
-    Message msg;
-    msg.type = static_cast<quint32>(object.value("type").toInt(Protocol::MSG_PRIVATE));
-    msg.sender = object.value("sender").toString();
-    msg.receiver = object.value("receiver").toString();
-    msg.content = object.value("content").toString();
-    msg.id = object.value("id").toString();
-    msg.timestamp = object.value("timestamp").toString().toULongLong();
-    msg.responseCode = static_cast<quint32>(object.value("responseCode").toInt());
-    return msg;
-}
+// ---------------- PostgreSQL storage helpers (Server) ----------------
 
 static QString databaseUrlFromEnvironment()
 {
@@ -219,12 +205,6 @@ bool Server::migrateDatabase()
                         "ON offline_messages(receiver, id)"))
         return false;
 
-    if (!execSql(query, "CREATE TABLE IF NOT EXISTS schema_meta ("
-                        "key TEXT PRIMARY KEY,"
-                        "value TEXT NOT NULL,"
-                        "updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"))
-        return false;
-
     return true;
 }
 
@@ -276,118 +256,6 @@ QStringList Server::registeredUsers() const
         users.append(query.value(0).toString());
 
     return users;
-}
-
-bool Server::legacyJsonHasBeenImported() const
-{
-    QSqlQuery query(m_db);
-    query.prepare("SELECT value FROM schema_meta WHERE key = 'legacy_json_imported'");
-    return query.exec() && query.next() && query.value(0).toString() == "1";
-}
-
-void Server::markLegacyJsonImported()
-{
-    QSqlQuery query(m_db);
-    query.prepare("INSERT INTO schema_meta(key, value, updated_at) VALUES('legacy_json_imported', '1', now()) "
-                  "ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()");
-    if (!query.exec())
-        qWarning() << "Не удалось сохранить флаг импорта JSON:" << query.lastError().text();
-}
-
-static QJsonObject readJsonObjectFile(const QString &path)
-{
-    QFile file(path);
-    if (!file.exists() || !file.open(QIODevice::ReadOnly))
-        return {};
-
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
-    return document.isObject() ? document.object() : QJsonObject();
-}
-
-void Server::migrateLegacyJsonFiles()
-{
-    if (legacyJsonHasBeenImported())
-        return;
-
-    QSqlQuery countQuery(m_db);
-    if (!countQuery.exec("SELECT COUNT(*) FROM users") || !countQuery.next() || countQuery.value(0).toLongLong() > 0)
-    {
-        markLegacyJsonImported();
-        return;
-    }
-
-    const QJsonObject users = readJsonObjectFile(m_usersFile);
-    const QJsonObject preKeys = readJsonObjectFile(m_preKeyBundlesFile);
-    const QJsonObject offline = readJsonObjectFile(m_offlineMessagesFile);
-
-    if (users.isEmpty() && preKeys.isEmpty() && offline.isEmpty())
-    {
-        markLegacyJsonImported();
-        return;
-    }
-
-    if (!m_db.transaction())
-    {
-        qWarning() << "Не удалось начать транзакцию импорта JSON:" << m_db.lastError().text();
-        return;
-    }
-
-    QSqlQuery userQuery(m_db);
-    userQuery.prepare("INSERT INTO users(username, password_json) VALUES(:username, :password_json) "
-                      "ON CONFLICT(username) DO NOTHING");
-    for (auto it = users.begin(); it != users.end(); ++it)
-    {
-        userQuery.bindValue(":username", it.key());
-        userQuery.bindValue(":password_json", QString::fromUtf8(QJsonDocument(it.value().toObject()).toJson(QJsonDocument::Compact)));
-        if (!userQuery.exec())
-            qWarning() << "Не удалось импортировать пользователя:" << userQuery.lastError().text();
-    }
-
-    QSqlQuery preKeyQuery(m_db);
-    preKeyQuery.prepare("INSERT INTO prekey_bundles(username, bundle_json) VALUES(:username, :bundle_json) "
-                        "ON CONFLICT(username) DO UPDATE SET bundle_json = EXCLUDED.bundle_json, updated_at = now()");
-    for (auto it = preKeys.begin(); it != preKeys.end(); ++it)
-    {
-        if (!userExists(it.key()))
-            continue;
-        preKeyQuery.bindValue(":username", it.key());
-        preKeyQuery.bindValue(":bundle_json", it.value().toString());
-        if (!preKeyQuery.exec())
-            qWarning() << "Не удалось импортировать prekey bundle:" << preKeyQuery.lastError().text();
-    }
-
-    QSqlQuery offlineQuery(m_db);
-    offlineQuery.prepare("INSERT INTO offline_messages(receiver, message_type, sender, content, message_id, message_timestamp, response_code) "
-                         "VALUES(:receiver, :message_type, :sender, :content, :message_id, :message_timestamp, :response_code)");
-    for (auto it = offline.begin(); it != offline.end(); ++it)
-    {
-        if (!userExists(it.key()))
-            continue;
-        const QJsonArray queue = it.value().toArray();
-        for (const QJsonValue &value : queue)
-        {
-            const Message msg = messageFromJson(value.toObject());
-            offlineQuery.bindValue(":receiver", it.key());
-            offlineQuery.bindValue(":message_type", static_cast<int>(msg.type));
-            offlineQuery.bindValue(":sender", msg.sender);
-            offlineQuery.bindValue(":content", msg.content);
-            offlineQuery.bindValue(":message_id", msg.id);
-            offlineQuery.bindValue(":message_timestamp", static_cast<qlonglong>(msg.timestamp));
-            offlineQuery.bindValue(":response_code", static_cast<int>(msg.responseCode));
-            if (!offlineQuery.exec())
-                qWarning() << "Не удалось импортировать offline-сообщение:" << offlineQuery.lastError().text();
-        }
-    }
-
-    markLegacyJsonImported();
-    if (!m_db.commit())
-    {
-        qWarning() << "Не удалось завершить импорт JSON:" << m_db.lastError().text();
-        m_db.rollback();
-        return;
-    }
-
-    qInfo() << "Старые JSON-файлы импортированы в PostgreSQL.";
 }
 
 static bool isValidUsername(const QString &username)
@@ -473,13 +341,6 @@ static bool constantTimeEquals(const QByteArray &left, const QByteArray &right)
     return diff == 0;
 }
 
-static QString makeLegacyHash(const QString &password, const QString &salt)
-{
-    QByteArray data = (password + salt).toUtf8();
-    QByteArray h = QCryptographicHash::hash(data, QCryptographicHash::Sha256);
-    return QString::fromUtf8(h.toHex());
-}
-
 static QJsonObject makePasswordEntry(const QString &password)
 {
     const QByteArray salt = randomBytes(PASSWORD_SALT_BYTES);
@@ -555,14 +416,7 @@ bool Server::verifyPassword(const QString &username, const QString &password)
         return pbkdf2Ok;
     }
 
-    const QString salt = obj.value("salt").toString();
-    const QString hash = obj.value("hash").toString();
-    const bool legacyOk = makeLegacyHash(password, salt) == hash;
-    if (legacyOk)
-    {
-        savePasswordEntry(username, makePasswordEntry(password));
-    }
-    return legacyOk;
+    return false;
 }
 
 bool Server::registerUser(const QString &username, const QString &password)
@@ -866,14 +720,9 @@ Server::Server(const QString &dataDir, QObject *parent)
     qInfo() << "Сервер инициализирован";
     qInfo() << "Папка данных сервера:" << m_dataDir;
     const QDir dir(m_dataDir);
-    m_usersFile = dir.filePath("users.json");
-    m_offlineMessagesFile = dir.filePath("offline_messages.json");
-    m_preKeyBundlesFile = dir.filePath("prekey_bundles.json");
     m_certificateFile = dir.filePath("tls_server.crt");
     m_privateKeyFile = dir.filePath("tls_server.key");
     m_storageReady = openDatabase() && migrateDatabase();
-    if (m_storageReady)
-        migrateLegacyJsonFiles();
 }
 
 bool Server::allowAuthAttempt(const QString &username)

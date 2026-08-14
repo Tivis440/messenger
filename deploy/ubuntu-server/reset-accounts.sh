@@ -25,7 +25,6 @@ DB_PASSWORD="$(cat "$DB_PASSWORD_FILE")"
 export PGPASSWORD="$DB_PASSWORD"
 psql "postgresql://$DB_USER@127.0.0.1:5432/$DB_NAME" -v ON_ERROR_STOP=1 <<SQL
 TRUNCATE TABLE offline_messages, prekey_bundles, users RESTART IDENTITY CASCADE;
-DELETE FROM schema_meta WHERE key = 'legacy_json_imported';
 SQL
 unset PGPASSWORD
 
